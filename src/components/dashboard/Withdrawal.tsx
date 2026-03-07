@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { ArrowUpFromLine, AlertCircle, Check, X, Delete, Lock, Bitcoin } from 'lucide-react';
+import { ArrowUpFromLine, AlertCircle, Check, X, Delete, Lock } from 'lucide-react';
 import { api } from '../../lib/api';
 
 type WithdrawalTab = 'crypto' | 'bank';

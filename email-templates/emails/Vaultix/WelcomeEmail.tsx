@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Html,
+  Head,
   Body,
   Container,
   Text,
@@ -31,6 +32,7 @@ const WelcomeEmail: React.FC<WelcomeEmailProps> = ({
 
   return (
     <Html>
+      <Head />
       <Preview>{previewText}</Preview>
       <Tailwind>
         <Body className="bg-gray-50 font-sans">
@@ -123,7 +125,7 @@ const WelcomeEmail: React.FC<WelcomeEmailProps> = ({
               <Section className="text-center mb-8">
                 <Button
                   href={verificationLink}
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg"
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-4 rounded-xl font-semibold text-lg shadow-lg"
                 >
                   Verify Your Email
                 </Button>
@@ -176,7 +178,7 @@ const WelcomeEmail: React.FC<WelcomeEmailProps> = ({
                 </Text>
                 <Link 
                   href="https://vaultix.com/support"
-                  className="text-blue-600 font-medium text-sm hover:underline"
+                  className="text-blue-600 font-medium text-sm underline"
                 >
                   Contact Support →
                 </Link>
@@ -192,11 +194,11 @@ const WelcomeEmail: React.FC<WelcomeEmailProps> = ({
                 123 Financial District, New York, NY 10001
               </Text>
               <Text className="text-xs text-gray-400 mt-2">
-                <Link href="https://vaultix.com/privacy" className="text-gray-400 hover:text-gray-600 underline mx-2">
+                <Link href="https://vaultix.com/privacy" className="text-gray-400 underline mx-2">
                   Privacy Policy
                 </Link>
                 •
-                <Link href="https://vaultix.com/terms" className="text-gray-400 hover:text-gray-600 underline mx-2">
+                <Link href="https://vaultix.com/terms" className="text-gray-400 underline mx-2">
                   Terms of Service
                 </Link>
               </Text>

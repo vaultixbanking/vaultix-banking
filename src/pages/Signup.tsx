@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, ArrowRight, Check, Eye, EyeOff, 
+  Check, Eye, EyeOff, 
   Upload, AlertCircle, ChevronLeft, ChevronRight,
   Lock, Mail, Phone, User, Calendar, MapPin, Globe,
-  Briefcase, DollarSign, CreditCard, Shield, FileText
+  Briefcase, DollarSign, CreditCard, Shield
 } from 'lucide-react';
 
 interface FormData {

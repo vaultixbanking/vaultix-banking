@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Wallet, Loader2, Check, AlertCircle, RefreshCw, Copy, Trash2 } from 'lucide-react';
+import { Wallet, Loader2, Check, AlertCircle, RefreshCw, Copy } from 'lucide-react';
 import { adminApi } from '../../lib/adminApi';
 
 interface DepositMethod {
