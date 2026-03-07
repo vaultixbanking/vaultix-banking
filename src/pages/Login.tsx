@@ -148,7 +148,7 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-linear-to-br from-primary-50 via-white to-primary-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" />
@@ -159,7 +159,7 @@ const Login: React.FC = () => {
         {/* Logo and Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="bg-gradient-to-r from-primary-600 to-primary-800 p-3 rounded-2xl shadow-lg">
+            <div className="bg-linear-to-r from-primary-600 to-primary-800 p-3 rounded-2xl shadow-lg">
               <Shield className="w-8 h-8 text-white" />
             </div>
           </div>
@@ -388,7 +388,7 @@ const Login: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full bg-gradient-to-r from-primary-600 to-primary-700 text-white py-3 px-4 rounded-xl font-semibold transition-all transform hover:scale-[1.02] focus:ring-4 focus:ring-primary-200 ${
+              className={`w-full bg-linear-to-r from-primary-600 to-primary-700 text-white py-3 px-4 rounded-xl font-semibold transition-all transform hover:scale-[1.02] focus:ring-4 focus:ring-primary-200 ${
                 isLoading 
                   ? 'opacity-70 cursor-not-allowed' 
                   : 'hover:shadow-lg'
@@ -466,7 +466,7 @@ const Login: React.FC = () => {
           {/* Security Notice */}
           <div className="bg-secondary-50 px-6 py-4 border-t border-secondary-100">
             <div className="flex items-start gap-3">
-              <Shield className="w-5 h-5 text-primary-500 flex-shrink-0 mt-0.5" />
+              <Shield className="w-5 h-5 text-primary-500 shrink-0 mt-0.5" />
               <div className="text-xs text-secondary-600">
                 <p className="font-medium text-secondary-700 mb-1">Bank-Grade Security</p>
                 <p>Your information is protected by 256-bit encryption and multi-factor authentication. Never share your password with anyone.</p>

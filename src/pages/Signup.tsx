@@ -300,7 +300,7 @@ const Signup: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-white py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-linear-to-br from-primary-50 to-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
@@ -324,7 +324,7 @@ const Signup: React.FC = () => {
           </div>
           <div className="h-2 bg-secondary-100 rounded-full overflow-hidden">
             <div 
-              className="h-full bg-gradient-to-r from-primary-500 to-primary-600 transition-all duration-500 ease-out"
+              className="h-full bg-linear-to-r from-primary-500 to-primary-600 transition-all duration-500 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
