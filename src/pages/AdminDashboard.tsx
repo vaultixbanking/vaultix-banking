@@ -27,7 +27,7 @@ const navItems: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: 'home', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
   { id: 'users', label: 'Users', icon: <Users className="w-5 h-5" /> },
   { id: 'deposit', label: 'Deposit Methods', icon: <Wallet className="w-5 h-5" /> },
-  { id: 'blc', label: 'Balance Manager', icon: <DollarSign className="w-5 h-5" /> },
+  { id: 'blc', label: 'Account Funding', icon: <DollarSign className="w-5 h-5" /> },
   { id: 'transactions', label: 'Transactions', icon: <ArrowRightLeft className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
 ];

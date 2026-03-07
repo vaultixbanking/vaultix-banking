@@ -6,7 +6,8 @@ import {
   getDepositMethodByCryptoService,
   getAllUsersService,
   getUserByAccountService,
-  updateUserBLCService,
+  creditUserAccountService,
+  getUserFundingHistoryService,
   getAdminStatsService,
   getAllTransactionsService,
 } from './admin.service';
@@ -91,14 +92,37 @@ export const getUserByAccount = async (
   }
 };
 
-export const updateUserBLC = async (
+export const creditUserAccount = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const data = await updateUserBLCService(req.params.accountNumber, req.body);
-    res.status(200).json({ success: true, message: 'BLC updated successfully.', data });
+    const { amount, description, adminNote } = req.body;
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      res.status(400).json({ success: false, message: 'A valid positive amount is required.' });
+      return;
+    }
+    const data = await creditUserAccountService(
+      req.params.accountNumber,
+      parseFloat(amount),
+      description,
+      adminNote
+    );
+    res.status(200).json({ success: true, message: 'Account credited successfully.', data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getUserFundingHistory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await getUserFundingHistoryService(req.params.accountNumber);
+    res.status(200).json({ success: true, message: 'Funding history fetched.', data });
   } catch (err) {
     next(err);
   }

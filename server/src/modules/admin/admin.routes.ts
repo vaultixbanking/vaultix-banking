@@ -6,7 +6,8 @@ import {
   getDepositByCrypto,
   getAllUsers,
   getUserByAccount,
-  updateUserBLC,
+  creditUserAccount,
+  getUserFundingHistory,
   getAdminStats,
   getAllTransactions,
 } from './admin.controller';
@@ -23,7 +24,8 @@ router.get('/stats', authenticate, getAdminStats);
 // ─── Users Management (protected) ──────────────────────────────────────────
 router.get('/users', authenticate, getAllUsers);
 router.get('/users/:accountNumber', authenticate, getUserByAccount);
-router.patch('/users/:accountNumber/blc', authenticate, updateUserBLC);
+router.post('/users/:accountNumber/credit', authenticate, creditUserAccount);
+router.get('/users/:accountNumber/funding-history', authenticate, getUserFundingHistory);
 
 // ─── Deposit Methods (protected) ───────────────────────────────────────────
 router.get('/deposit-methods', authenticate, getDepositMethods);

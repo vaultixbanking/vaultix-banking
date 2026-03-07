@@ -61,7 +61,8 @@ model User {
   transactions   Float    @default(0)
 
   // ─── Relations ─────────────────────────────────────────────────────────────
-  withdrawals    Withdrawal[]
+  withdrawals         Withdrawal[]
+  fundingTransactions FundingTransaction[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -96,6 +97,25 @@ model DepositMethod {
   details String
 
   @@map("deposit_methods")
+}
+
+// ─── Funding Transaction (admin credit operations) ──────────────────────────
+
+model FundingTransaction {
+  id            String   @id @default(cuid())
+  transactionId String   @unique
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  amount        Float
+  currency      String   @default("USD")
+  description   String?
+  adminNote     String?
+  balanceBefore Float
+  balanceAfter  Float
+  status        String   @default("COMPLETED")
+  createdAt     DateTime @default(now())
+
+  @@map("funding_transactions")
 }
 
 // ─── Admin ──────────────────────────────────────────────────────────────────
