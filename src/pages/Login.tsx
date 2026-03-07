@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { 
   Mail, Lock, Eye, EyeOff, LogIn, 
   Shield, AlertCircle, Check, ArrowRight 
@@ -452,13 +452,13 @@ const Login: React.FC = () => {
             <div className="mt-8 text-center">
               <p className="text-secondary-600">
                 Don't have an account?{' '}
-                <a 
-                  href="/signup" 
+                <Link 
+                  to="/signup" 
                   className="text-primary-600 hover:text-primary-700 font-semibold inline-flex items-center gap-1 group"
                 >
                   Create an account
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </a>
+                </Link>
               </p>
             </div>
           </form>

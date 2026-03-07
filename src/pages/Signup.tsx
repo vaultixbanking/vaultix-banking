@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   Check, Eye, EyeOff, 
   Upload, AlertCircle, ChevronLeft, ChevronRight,
@@ -1235,9 +1235,9 @@ const Signup: React.FC = () => {
         <div className="text-center mt-6">
           <p className="text-secondary-600">
             Already have an account?{' '}
-            <a href="/login" className="text-primary-600 hover:text-primary-700 font-medium hover:underline">
+            <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium hover:underline">
               Sign in here
-            </a>
+            </Link>
           </p>
         </div>
       </div>
