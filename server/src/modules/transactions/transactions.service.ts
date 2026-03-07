@@ -81,7 +81,7 @@ export const getWithdrawalHistoryService = async (userId: string) => {
     }),
   ]);
 
-  const withdrawalItems = withdrawals.map(w => ({
+  const withdrawalItems = withdrawals.map((w: typeof withdrawals[number]) => ({
     id: w.id,
     transactionId: w.transactionId,
     amount: w.amount,
@@ -91,7 +91,7 @@ export const getWithdrawalHistoryService = async (userId: string) => {
     createdAt: w.createdAt.toISOString(),
   }));
 
-  const creditItems = fundingTxns.map(f => ({
+  const creditItems = fundingTxns.map((f: typeof fundingTxns[number]) => ({
     id: f.id,
     transactionId: f.transactionId,
     amount: f.amount,

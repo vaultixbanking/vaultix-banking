@@ -255,7 +255,7 @@ export const getAdminStatsService = async () => {
   ]);
 
   const users = await prisma.user.findMany({ select: { totalBalance: true } });
-  const totalBalance = users.reduce((sum, u) => sum + u.totalBalance, 0);
+  const totalBalance = users.reduce((sum: number, u: { totalBalance: number }) => sum + u.totalBalance, 0);
 
   const recentWithdrawals = await prisma.withdrawal.findMany({
     take: 5,
