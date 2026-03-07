@@ -1,48 +1,65 @@
-import { useState, useCallback } from 'react';
-import { ArrowUpFromLine, AlertCircle, Check, X, Delete, Lock } from 'lucide-react';
+import { useState } from 'react';
+import {
+  ArrowUpFromLine, AlertCircle, Check, ChevronRight,
+  ChevronLeft, Sparkles, Bitcoin, Banknote
+} from 'lucide-react';
 import { api } from '../../lib/api';
+import TransactionPinModal from './TransactionPinModal';
 
-type WithdrawalTab = 'crypto' | 'bank';
+// ─── Types ─────────────────────────────────────────────────────────────────────
+type Tab = 'crypto' | 'bank';
+type Step = 'form' | 'summary' | 'success';
+
+interface SuccessData {
+  transactionId: string;
+  newBalance: number;
+  amount: number;
+}
+
+const cryptoOptions = [
+  { value: 'bitcoin',  label: 'Bitcoin',  symbol: 'BTC', icon: '₿' },
+  { value: 'ethereum', label: 'Ethereum', symbol: 'ETH', icon: 'Ξ' },
+  { value: 'litecoin', label: 'Litecoin', symbol: 'LTC', icon: 'Ł' },
+  { value: 'usdt',     label: 'Tether',   symbol: 'USDT', icon: '₮' },
+];
 
 const cryptoNetworks: Record<string, string[]> = {
-  bitcoin: ['Bitcoin Network'],
+  bitcoin:  ['Bitcoin Network'],
   ethereum: ['ERC20', 'BEP20'],
   litecoin: ['Litecoin Network', 'BEP20'],
-  usdt: ['ERC20', 'TRC20', 'BEP20', 'SOL'],
+  usdt:     ['TRC20', 'ERC20', 'BEP20', 'SOL'],
 };
 
+// ─── Component ─────────────────────────────────────────────────────────────────
 const Withdrawal = () => {
-  const [tab, setTab] = useState<WithdrawalTab>('crypto');
-  const [step, setStep] = useState<'form' | 'summary' | 'pin'>('form');
+  const [tab, setTab]   = useState<Tab>('crypto');
+  const [step, setStep] = useState<Step>('form');
 
-  // Crypto form
-  const [cryptoAmount, setCryptoAmount] = useState('');
-  const [cryptoType, setCryptoType] = useState('bitcoin');
-  const [walletAddress, setWalletAddress] = useState('');
+  // ── Crypto fields ────────────────────────────────────────────────────────────
+  const [cryptoAmount, setCryptoAmount]     = useState('');
+  const [cryptoType, setCryptoType]         = useState('bitcoin');
+  const [walletAddress, setWalletAddress]   = useState('');
   const [selectedNetwork, setSelectedNetwork] = useState('Bitcoin Network');
-  const [customNetwork, setCustomNetwork] = useState('');
+  const [customNetwork, setCustomNetwork]   = useState('');
   const [isCustomNetwork, setIsCustomNetwork] = useState(false);
 
-  // Bank form
+  // ── Bank fields ──────────────────────────────────────────────────────────────
+  const [bankAmount, setBankAmount]           = useState('');
   const [beneficiaryName, setBeneficiaryName] = useState('');
-  const [bankName, setBankName] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [routingNumber, setRoutingNumber] = useState('');
-  const [bankAmount, setBankAmount] = useState('');
+  const [bankName, setBankName]               = useState('');
+  const [accountNumber, setAccountNumber]     = useState('');
+  const [routingNumber, setRoutingNumber]     = useState('');
 
-  // PIN
-  const [pin, setPin] = useState('');
-  const [pinError, setPinError] = useState('');
+  // ── State ────────────────────────────────────────────────────────────────────
+  const [error, setError]       = useState('');
+  const [pinOpen, setPinOpen]   = useState(false);
+  const [success, setSuccess]   = useState<SuccessData | null>(null);
 
-  // State
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState<{ transactionId: string; newBalance: number; amount: number } | null>(null);
-
+  // ─── Crypto helpers ───────────────────────────────────────────────────────────
   const handleCryptoTypeChange = (type: string) => {
     setCryptoType(type);
-    const networks = cryptoNetworks[type] || [];
-    setSelectedNetwork(networks[0] || '');
+    const nets = cryptoNetworks[type] || [];
+    setSelectedNetwork(nets[0] || '');
     setIsCustomNetwork(false);
     setCustomNetwork('');
   };
@@ -58,246 +75,303 @@ const Withdrawal = () => {
     }
   };
 
-  const getActiveNetwork = () => isCustomNetwork ? customNetwork : selectedNetwork;
+  const activeNetwork = isCustomNetwork ? customNetwork : selectedNetwork;
+  const activeAmount  = tab === 'crypto' ? cryptoAmount : bankAmount;
+  const amt           = parseFloat(activeAmount) || 0;
 
-  const getFormData = () => {
+  // ─── Validation ───────────────────────────────────────────────────────────────
+  const validate = (): string | null => {
     if (tab === 'crypto') {
-      return {
-        amount: parseFloat(cryptoAmount),
-        withdrawalType: 'CRYPTO' as const,
-        details: { cryptoType, walletAddress, network: getActiveNetwork() },
-      };
-    }
-    return {
-      amount: parseFloat(bankAmount),
-      withdrawalType: 'BANK' as const,
-      details: { beneficiaryName, bankName, accountNumber, routingNumber },
-    };
-  };
-
-  const validateForm = () => {
-    if (tab === 'crypto') {
-      if (!cryptoAmount || parseFloat(cryptoAmount) <= 0) return 'Enter a valid amount';
-      if (!walletAddress.trim()) return 'Enter your wallet address';
-      if (!getActiveNetwork().trim()) return 'Select or enter a network';
+      if (!cryptoAmount || parseFloat(cryptoAmount) <= 0) return 'Enter a valid amount.';
+      if (!walletAddress.trim()) return 'Enter your wallet address.';
+      if (!activeNetwork.trim()) return 'Select or enter a network.';
     } else {
-      if (!bankAmount || parseFloat(bankAmount) <= 0) return 'Enter a valid amount';
-      if (!beneficiaryName.trim()) return 'Enter beneficiary name';
-      if (!bankName.trim()) return 'Enter bank name';
-      if (!accountNumber.trim()) return 'Enter account number';
-      if (!/^\d{9}$/.test(routingNumber)) return 'Routing number must be exactly 9 digits';
+      if (!bankAmount || parseFloat(bankAmount) <= 0) return 'Enter a valid amount.';
+      if (!beneficiaryName.trim()) return 'Enter beneficiary name.';
+      if (!bankName.trim()) return 'Enter bank name.';
+      if (!accountNumber.trim()) return 'Enter account number.';
+      if (!/^\d{9}$/.test(routingNumber)) return 'Routing number must be exactly 9 digits.';
     }
     return null;
   };
 
-  const handleShowSummary = (e: React.FormEvent) => {
+  const handleReview = (e: React.FormEvent) => {
     e.preventDefault();
-    const err = validateForm();
-    if (err) { setError(err); return; }
+    const err = validate();
+    if (err) return setError(err);
     setError('');
     setStep('summary');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleConfirmTransaction = () => {
-    setStep('pin');
-    setPin('');
-    setPinError('');
+  // ─── PIN submit → API ─────────────────────────────────────────────────────────
+  const handlePinSubmit = async (pin: string) => {
+    const body = tab === 'crypto'
+      ? {
+          pin,
+          amount: parseFloat(cryptoAmount),
+          withdrawalType: 'CRYPTO' as const,
+          details: { cryptoType, walletAddress, network: activeNetwork },
+        }
+      : {
+          pin,
+          amount: parseFloat(bankAmount),
+          withdrawalType: 'BANK' as const,
+          details: {
+            transferType: 'BANK_WITHDRAWAL',
+            beneficiaryName,
+            bankName,
+            accountNumber,
+            routingNumber,
+          },
+        };
+
+    const res = await api<{ success: boolean; data: SuccessData }>(
+      '/api/transactions/withdraw',
+      { method: 'POST', body }
+    );
+    setSuccess(res.data);
+    setPinOpen(false);
+    setStep('success');
   };
 
-  const handlePinKey = useCallback((digit: string) => {
-    if (pin.length < 4) setPin(prev => prev + digit);
-  }, [pin]);
-
-  const handlePinDelete = useCallback(() => setPin(prev => prev.slice(0, -1)), []);
-
-  const handleSubmitWithdrawal = useCallback(async () => {
-    if (pin.length !== 4) { setPinError('Enter your 4-digit PIN'); return; }
-    setSubmitting(true);
-    setPinError('');
-    try {
-      const formData = getFormData();
-      const res = await api<{ success: boolean; data: { transactionId: string; newBalance: number; amount: number } }>(
-        '/api/transactions/withdraw',
-        { method: 'POST', body: { pin, ...formData } }
-      );
-      setSuccess(res.data);
-    } catch (err: unknown) {
-      setPinError(err instanceof Error ? err.message : 'Withdrawal failed');
-      setPin('');
-    } finally {
-      setSubmitting(false);
-    }
-  }, [pin, tab, cryptoAmount, cryptoType, walletAddress, selectedNetwork, customNetwork, bankAmount, beneficiaryName, bankName, accountNumber, routingNumber]);
-
-  const resetForm = () => {
+  // ─── Reset ────────────────────────────────────────────────────────────────────
+  const reset = () => {
     setCryptoAmount(''); setCryptoType('bitcoin'); setWalletAddress('');
     setSelectedNetwork('Bitcoin Network'); setCustomNetwork(''); setIsCustomNetwork(false);
-    setBeneficiaryName(''); setBankName(''); setAccountNumber('');
-    setRoutingNumber(''); setBankAmount('');
-    setPin(''); setStep('form'); setSuccess(null); setError('');
+    setBankAmount(''); setBeneficiaryName(''); setBankName('');
+    setAccountNumber(''); setRoutingNumber('');
+    setStep('form'); setSuccess(null); setError('');
   };
 
-  // ─── Success ──────────────────────────────────────────────────────────────
-  if (success) {
-    return (
-      <div className="w-full text-center py-16">
-        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Check className="w-8 h-8 text-green-600" />
-        </div>
-        <h2 className="text-2xl font-bold text-secondary-900 mb-2">Withdrawal Successful!</h2>
-        <div className="bg-secondary-50 rounded-xl p-4 mb-6 text-left max-w-sm mx-auto space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-secondary-500">Transaction ID</span>
-            <span className="font-mono font-semibold text-secondary-700 text-xs">{success.transactionId}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-secondary-500">Amount</span>
-            <span className="font-semibold text-secondary-700">${success.amount.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-secondary-500">New Balance</span>
-            <span className="font-semibold text-green-600">${success.newBalance.toLocaleString()}</span>
-          </div>
-        </div>
-        <button onClick={resetForm} className="px-6 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors">
-          New Withdrawal
-        </button>
-      </div>
-    );
-  }
-
-  // ─── PIN Step ─────────────────────────────────────────────────────────────
-  if (step === 'pin') {
-    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'delete'];
-    return (
-      <div className="w-full flex items-start justify-center py-8">
-        <div className="w-full max-w-sm bg-white rounded-2xl border border-secondary-100 shadow-sm p-6">
-          <div className="text-center mb-6">
-            <div className="w-12 h-12 bg-primary-50 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Lock className="w-6 h-6 text-primary-600" />
-            </div>
-            <h3 className="font-semibold text-secondary-900 mb-1">Enter PIN to Confirm</h3>
-            <p className="text-xs text-secondary-500">Enter your 4-digit security PIN to authorize this withdrawal</p>
-          </div>
-
-          {/* PIN Dots */}
-          <div className="flex items-center justify-center gap-4 mb-6">
-            {[0, 1, 2, 3].map(i => (
-              <div key={i} className={`w-4 h-4 rounded-full transition-all ${i < pin.length ? 'bg-primary-600 scale-110' : 'bg-secondary-200 border-2 border-secondary-300'}`} />
-            ))}
-          </div>
-
-          {pinError && <p className="text-center text-sm text-red-500 mb-4">{pinError}</p>}
-
-          {/* Numpad */}
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            {keys.map(key => {
-              if (key === 'clear') return (
-                <button key={key} type="button" onClick={() => { setPin(''); setPinError(''); }} disabled={submitting}
-                  className="h-12 rounded-xl bg-secondary-50 hover:bg-red-50 text-red-500 text-sm font-medium transition-all active:scale-95 flex items-center justify-center">
-                  <X className="w-4 h-4" />
-                </button>
-              );
-              if (key === 'delete') return (
-                <button key={key} type="button" onClick={handlePinDelete} disabled={submitting}
-                  className="h-12 rounded-xl bg-secondary-50 hover:bg-secondary-100 text-secondary-500 transition-all active:scale-95 flex items-center justify-center">
-                  <Delete className="w-4 h-4" />
-                </button>
-              );
-              return (
-                <button key={key} type="button" onClick={() => handlePinKey(key)} disabled={submitting || pin.length >= 4}
-                  className="h-12 rounded-xl bg-secondary-50 hover:bg-secondary-100 text-secondary-900 text-lg font-semibold transition-all active:scale-95">
-                  {key}
-                </button>
-              );
-            })}
-          </div>
-
-          <button onClick={handleSubmitWithdrawal} disabled={pin.length !== 4 || submitting}
-            className="w-full py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-            {submitting ? (
-              <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Processing...</>
-            ) : 'Confirm Withdrawal'}
-          </button>
-          <button onClick={() => setStep('summary')} className="w-full mt-2 py-2 text-sm text-secondary-500 hover:text-secondary-700 transition-colors">
-            ← Back to Summary
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Summary Step ─────────────────────────────────────────────────────────
-  if (step === 'summary') {
-    const formData = getFormData();
-    return (
-      <div className="w-full flex items-start justify-center py-8">
-        <div className="w-full max-w-lg bg-white rounded-2xl border border-secondary-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 bg-primary-50 border-b border-primary-100">
-            <h3 className="font-semibold text-primary-900">Review Transaction</h3>
-            <p className="text-xs text-primary-600 mt-0.5">Please confirm the details below before proceeding</p>
-          </div>
-          <div className="p-6 space-y-3">
-            <div className="flex justify-between py-2 border-b border-secondary-50">
-              <span className="text-sm text-secondary-500">Amount</span>
-              <span className="text-sm font-semibold text-secondary-900">${formData.amount.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between py-2 border-b border-secondary-50">
-              <span className="text-sm text-secondary-500">Method</span>
-              <span className="text-sm font-semibold text-secondary-900 capitalize">{tab} Withdrawal</span>
-            </div>
-            {tab === 'crypto' ? (
-              <>
-                <div className="flex justify-between py-2 border-b border-secondary-50">
-                  <span className="text-sm text-secondary-500">Crypto</span>
-                  <span className="text-sm font-semibold text-secondary-900 capitalize">{cryptoType}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-secondary-50">
-                  <span className="text-sm text-secondary-500">Network</span>
-                  <span className="text-sm font-semibold text-secondary-900">{getActiveNetwork()}</span>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span className="text-sm text-secondary-500">Wallet</span>
-                  <span className="text-xs font-mono font-semibold text-secondary-900 break-all text-right max-w-xs">{walletAddress}</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex justify-between py-2 border-b border-secondary-50">
-                  <span className="text-sm text-secondary-500">Beneficiary</span>
-                  <span className="text-sm font-semibold text-secondary-900">{beneficiaryName}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-secondary-50">
-                  <span className="text-sm text-secondary-500">Bank</span>
-                  <span className="text-sm font-semibold text-secondary-900">{bankName}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-secondary-50">
-                  <span className="text-sm text-secondary-500">Account</span>
-                  <span className="text-sm font-semibold text-secondary-900">{accountNumber}</span>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span className="text-sm text-secondary-500">Routing</span>
-                  <span className="text-sm font-semibold text-secondary-900">{routingNumber}</span>
-                </div>
-              </>
-            )}
-          </div>
-          <div className="px-6 pb-6 flex gap-3">
-            <button onClick={() => setStep('form')} className="flex-1 py-2.5 border border-secondary-200 rounded-xl text-secondary-700 font-medium hover:bg-secondary-50 transition-all">
-              Edit
-            </button>
-            <button onClick={handleConfirmTransaction} className="flex-1 py-2.5 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all">
-              Confirm & Enter PIN
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Main Form ────────────────────────────────────────────────────────────
+  const maskedAccount = accountNumber ? `••••${accountNumber.slice(-4)}` : '';
+  const selectedCrypto = cryptoOptions.find(c => c.value === cryptoType);
   const availableNetworks = cryptoNetworks[cryptoType] || [];
 
+  // ─── Success ───────────────────────────────────────────────────────────────────
+  if (step === 'success' && success) {
+    const isCrypto = tab === 'crypto';
+    return (
+      <div className="w-full">
+        <div className="relative overflow-hidden bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 rounded-2xl shadow-xl shadow-primary-500/20 text-white">
+
+          {/* Background blobs */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-48 h-48 bg-white/5 rounded-full" />
+            <div className="absolute -bottom-16 -left-10 w-64 h-64 bg-white/5 rounded-full" />
+          </div>
+
+          <div className="relative z-10 p-8 text-center">
+
+            {/* Icon */}
+            <div className="relative inline-flex items-center justify-center mb-5">
+              <div className="w-20 h-20 bg-white/15 rounded-full flex items-center justify-center border border-white/30">
+                <Check className="w-10 h-10 text-white" strokeWidth={2.5} />
+              </div>
+              <div className="absolute -top-1 -right-1 w-7 h-7 bg-green-400 rounded-full flex items-center justify-center shadow-lg">
+                <Sparkles className="w-3.5 h-3.5 text-white" />
+              </div>
+            </div>
+
+            <h2 className="text-2xl font-bold mb-1">Withdrawal Successful!</h2>
+            <p className="text-primary-200 text-sm mb-6">
+              Your {isCrypto ? 'crypto' : 'bank'} withdrawal has been processed
+            </p>
+
+            {/* Amount pill */}
+            <div className="inline-block bg-white/15 backdrop-blur-sm border border-white/25 rounded-2xl px-8 py-4 mb-6">
+              <p className="text-xs text-primary-200 mb-0.5">Amount Withdrawn</p>
+              <p className="text-3xl font-bold tracking-tight">
+                ${success.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+
+            {/* Details card */}
+            <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-5 mb-6 text-left space-y-3">
+
+              <div className="flex items-center justify-between">
+                <span className="text-primary-200 text-xs">Type</span>
+                <span className="text-white text-sm font-semibold capitalize">
+                  {isCrypto ? `${selectedCrypto?.label} (${selectedCrypto?.symbol})` : 'Bank Withdrawal'}
+                </span>
+              </div>
+              <div className="h-px bg-white/10" />
+
+              {isCrypto ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary-200 text-xs">Network</span>
+                    <span className="text-white text-sm font-medium">{activeNetwork}</span>
+                  </div>
+                  <div className="h-px bg-white/10" />
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-primary-200 text-xs shrink-0">Wallet</span>
+                    <span className="text-white text-xs font-mono break-all text-right">{walletAddress}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary-200 text-xs">Beneficiary</span>
+                    <span className="text-white text-sm font-medium">{beneficiaryName}</span>
+                  </div>
+                  <div className="h-px bg-white/10" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary-200 text-xs">Bank</span>
+                    <span className="text-white text-sm font-medium">{bankName}</span>
+                  </div>
+                  <div className="h-px bg-white/10" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary-200 text-xs">Account</span>
+                    <span className="text-white text-sm font-mono">{maskedAccount}</span>
+                  </div>
+                </>
+              )}
+
+              <div className="h-px bg-white/10" />
+              <div className="flex items-center justify-between">
+                <span className="text-primary-200 text-xs">Transaction ID</span>
+                <span className="text-white text-xs font-mono">{success.transactionId}</span>
+              </div>
+              <div className="h-px bg-white/10" />
+              <div className="flex items-center justify-between">
+                <span className="text-primary-200 text-xs">New Balance</span>
+                <span className="text-green-300 text-sm font-bold">
+                  ${success.newBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-primary-300 mb-6">
+              {isCrypto
+                ? '⛓️ Crypto transactions are processed on-chain and may take a few minutes'
+                : '🕐 Bank withdrawals typically process within 1–3 business days'}
+            </p>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button
+                onClick={reset}
+                className="flex-1 py-3 bg-white/15 hover:bg-white/25 border border-white/25 text-white rounded-xl text-sm font-semibold transition-all"
+              >
+                New Withdrawal
+              </button>
+              <button
+                onClick={() => window.location.href = '/dashboard'}
+                className="flex-1 py-3 bg-white text-primary-700 rounded-xl text-sm font-bold hover:bg-primary-50 transition-all"
+              >
+                Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Summary ───────────────────────────────────────────────────────────────────
+  if (step === 'summary') {
+    const rows = tab === 'crypto'
+      ? [
+          { label: 'Cryptocurrency', value: `${selectedCrypto?.label} (${selectedCrypto?.symbol})` },
+          { label: 'Network',        value: activeNetwork },
+          { label: 'Wallet Address', value: walletAddress, mono: true },
+        ]
+      : [
+          { label: 'Beneficiary',    value: beneficiaryName },
+          { label: 'Bank',           value: bankName },
+          { label: 'Account',        value: maskedAccount },
+          { label: 'Routing',        value: routingNumber },
+        ];
+
+    return (
+      <>
+        <div className="w-full">
+          <div className="bg-white rounded-2xl border border-secondary-100 shadow-sm overflow-hidden">
+
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-secondary-100 flex items-center gap-3">
+              <div className="bg-primary-50 w-10 h-10 rounded-xl flex items-center justify-center">
+                <ArrowUpFromLine className="w-5 h-5 text-primary-600" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-secondary-900">Review Withdrawal</h2>
+                <p className="text-xs text-secondary-500">Confirm your withdrawal details</p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-5">
+
+              {/* Amount highlight */}
+              <div className={`rounded-2xl p-5 text-center border ${
+                tab === 'crypto'
+                  ? 'bg-orange-50 border-orange-100'
+                  : 'bg-primary-50 border-primary-100'
+              }`}>
+                <p className="text-xs text-secondary-500 mb-1">You are withdrawing</p>
+                <p className={`text-3xl font-bold ${tab === 'crypto' ? 'text-orange-600' : 'text-primary-700'}`}>
+                  ${amt.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-secondary-400 mt-1">
+                  {tab === 'crypto' ? `via ${selectedCrypto?.label} · ${activeNetwork}` : 'via Bank Transfer (ACH)'}
+                </p>
+              </div>
+
+              {/* Details */}
+              <div className="border border-secondary-100 rounded-xl overflow-hidden divide-y divide-secondary-100">
+                {rows.map(row => (
+                  <div key={row.label} className="flex items-start justify-between px-4 py-3 gap-4">
+                    <span className="text-sm text-secondary-500 shrink-0">{row.label}</span>
+                    <span className={`text-sm font-medium text-secondary-900 text-right break-all ${row.mono ? 'font-mono text-xs' : ''}`}>
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Warning */}
+              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-amber-700">
+                  {tab === 'crypto'
+                    ? 'Double-check the wallet address and network. Crypto transactions cannot be reversed.'
+                    : 'Verify all bank details carefully. Withdrawals cannot be reversed once submitted.'}
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep('form')}
+                  className="flex-1 py-3 border border-secondary-200 rounded-xl text-sm font-semibold text-secondary-700 hover:bg-secondary-50 transition-all flex items-center justify-center gap-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Edit
+                </button>
+                <button
+                  onClick={() => setPinOpen(true)}
+                  className="flex-1 py-3 bg-primary-600 text-white rounded-xl text-sm font-semibold hover:bg-primary-700 transition-all flex items-center justify-center gap-2"
+                >
+                  Enter PIN
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <TransactionPinModal
+          isOpen={pinOpen}
+          onClose={() => setPinOpen(false)}
+          onSubmit={handlePinSubmit}
+          title="Authorize Withdrawal"
+          subtitle={`Enter your PIN to withdraw $${amt.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+        />
+      </>
+    );
+  }
+
+  // ─── Form ──────────────────────────────────────────────────────────────────────
   return (
     <div className="w-full">
       <div className="bg-white rounded-2xl border border-secondary-100 shadow-sm overflow-hidden">
@@ -309,44 +383,72 @@ const Withdrawal = () => {
           </div>
           <div>
             <h2 className="font-semibold text-secondary-900">Withdrawal</h2>
-            <p className="text-xs text-secondary-500">Withdraw funds from your account</p>
+            <p className="text-xs text-secondary-500">Withdraw funds via crypto or bank transfer</p>
           </div>
         </div>
 
         {/* Tabs */}
         <div className="flex border-b border-secondary-100">
           {(['crypto', 'bank'] as const).map(t => (
-            <button key={t} onClick={() => { setTab(t); setError(''); }}
-              className={`flex-1 py-3 text-sm font-medium transition-all border-b-2 ${tab === t ? 'border-primary-600 text-primary-600' : 'border-transparent text-secondary-500 hover:text-secondary-700'}`}>
-              {t === 'crypto' ? '₿ Crypto Withdrawal' : '🏦 Bank Withdrawal'}
+            <button
+              key={t}
+              onClick={() => { setTab(t); setError(''); }}
+              className={`flex-1 py-3 text-sm font-medium transition-all border-b-2 flex items-center justify-center gap-2 ${
+                tab === t
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-secondary-500 hover:text-secondary-700'
+              }`}
+            >
+              {t === 'crypto'
+                ? <><Bitcoin className="w-4 h-4" /> Crypto</>
+                : <><Banknote className="w-4 h-4" /> Bank Transfer</>
+              }
             </button>
           ))}
         </div>
 
-        <form onSubmit={handleShowSummary} className="p-6 space-y-5">
+        <form onSubmit={handleReview} className="p-6 space-y-5">
 
-          {tab === 'crypto' ? (
+          {/* ── Crypto Tab ──────────────────────────────────────────────────── */}
+          {tab === 'crypto' && (
             <>
               {/* Amount */}
               <div>
                 <label className="block text-sm font-medium text-secondary-700 mb-2">Amount (USD)</label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary-400 font-semibold">$</span>
-                  <input type="number" value={cryptoAmount} onChange={e => setCryptoAmount(e.target.value)} placeholder="0.00" min="1"
-                    className="w-full pl-8 pr-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all" />
+                  <input
+                    type="number"
+                    value={cryptoAmount}
+                    onChange={e => { setCryptoAmount(e.target.value); setError(''); }}
+                    placeholder="0.00"
+                    min="1"
+                    className="w-full pl-8 pr-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  />
                 </div>
               </div>
 
-              {/* Crypto Type */}
+              {/* Crypto selector */}
               <div>
                 <label className="block text-sm font-medium text-secondary-700 mb-2">Cryptocurrency</label>
-                <select value={cryptoType} onChange={e => handleCryptoTypeChange(e.target.value)}
-                  className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white">
-                  <option value="bitcoin">Bitcoin (BTC)</option>
-                  <option value="ethereum">Ethereum (ETH)</option>
-                  <option value="litecoin">Litecoin (LTC)</option>
-                  <option value="usdt">Tether (USDT)</option>
-                </select>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {cryptoOptions.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleCryptoTypeChange(opt.value)}
+                      className={`p-3 rounded-xl border text-center transition-all ${
+                        cryptoType === opt.value
+                          ? 'border-primary-500 bg-primary-50 text-primary-700'
+                          : 'border-secondary-200 hover:border-primary-300 text-secondary-600'
+                      }`}
+                    >
+                      <span className="text-lg block mb-0.5">{opt.icon}</span>
+                      <span className="text-xs font-semibold block">{opt.label}</span>
+                      <span className="text-xs text-secondary-400">{opt.symbol}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Network */}
@@ -360,7 +462,7 @@ const Withdrawal = () => {
                   <>
                     <select
                       value={isCustomNetwork ? 'other' : selectedNetwork}
-                      onChange={e => handleNetworkChange(e.target.value)}
+                      onChange={e => { handleNetworkChange(e.target.value); setError(''); }}
                       className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
                     >
                       {availableNetworks.map(n => (
@@ -372,30 +474,42 @@ const Withdrawal = () => {
                       <input
                         type="text"
                         value={customNetwork}
-                        onChange={e => setCustomNetwork(e.target.value)}
-                        placeholder="Type network name (e.g. Polygon, Arbitrum)"
+                        onChange={e => { setCustomNetwork(e.target.value); setError(''); }}
+                        placeholder="e.g. Polygon, Arbitrum"
                         className="w-full mt-2 px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
                     )}
                   </>
                 )}
-                <p className="text-xs text-amber-600 mt-1">⚠️ Make sure the network matches your wallet. Wrong network = lost funds.</p>
+                <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Wrong network = permanently lost funds. Double-check before proceeding.
+                </p>
               </div>
 
-              {/* Wallet Address */}
+              {/* Wallet address */}
               <div>
                 <label className="block text-sm font-medium text-secondary-700 mb-2">Your Wallet Address</label>
-                <input type="text" value={walletAddress} onChange={e => setWalletAddress(e.target.value)}
+                <input
+                  type="text"
+                  value={walletAddress}
+                  onChange={e => { setWalletAddress(e.target.value); setError(''); }}
                   placeholder="Paste your wallet address here"
-                  className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm" />
+                  className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
+                />
               </div>
             </>
-          ) : (
+          )}
+
+          {/* ── Bank Tab ────────────────────────────────────────────────────── */}
+          {tab === 'bank' && (
             <>
-              {/* Bank Warning */}
+              {/* Warning */}
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-                <p className="text-sm text-amber-700">Account name must match your Vaultix registered name.</p>
+                <p className="text-xs text-amber-700">
+                  Account name must match your Vaultix registered name for successful processing.
+                </p>
               </div>
 
               {/* Amount */}
@@ -403,41 +517,67 @@ const Withdrawal = () => {
                 <label className="block text-sm font-medium text-secondary-700 mb-2">Amount (USD)</label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary-400 font-semibold">$</span>
-                  <input type="number" value={bankAmount} onChange={e => setBankAmount(e.target.value)} placeholder="0.00" min="1"
-                    className="w-full pl-8 pr-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all" />
+                  <input
+                    type="number"
+                    value={bankAmount}
+                    onChange={e => { setBankAmount(e.target.value); setError(''); }}
+                    placeholder="0.00"
+                    min="1"
+                    className="w-full pl-8 pr-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  />
                 </div>
               </div>
 
-              {/* Beneficiary Name + Bank Name */}
+              {/* Beneficiary + Bank name */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 mb-2">Beneficiary Name</label>
-                  <input type="text" value={beneficiaryName} onChange={e => setBeneficiaryName(e.target.value)} placeholder="Full legal name"
-                    className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                  <input
+                    type="text"
+                    value={beneficiaryName}
+                    onChange={e => { setBeneficiaryName(e.target.value); setError(''); }}
+                    placeholder="Full legal name"
+                    className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 mb-2">Bank Name</label>
-                  <input type="text" value={bankName} onChange={e => setBankName(e.target.value)} placeholder="e.g. Chase, Wells Fargo"
-                    className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                  <input
+                    type="text"
+                    value={bankName}
+                    onChange={e => { setBankName(e.target.value); setError(''); }}
+                    placeholder="e.g. Chase, Wells Fargo"
+                    className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
                 </div>
               </div>
 
-              {/* Account Number + Routing Number */}
+              {/* Account + Routing */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 mb-2">Account Number</label>
-                  <input type="text" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} placeholder="Bank account number"
-                    className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                  <input
+                    type="text"
+                    value={accountNumber}
+                    onChange={e => { setAccountNumber(e.target.value); setError(''); }}
+                    placeholder="Bank account number"
+                    className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 mb-2">
                     Routing Number
                     <span className="ml-1 text-xs text-secondary-400 font-normal">(9 digits)</span>
                   </label>
-                  <input type="text" value={routingNumber}
-                    onChange={e => setRoutingNumber(e.target.value.replace(/\D/g, '').slice(0, 9))}
-                    placeholder="e.g. 021000021" maxLength={9}
-                    className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                  <input
+                    type="text"
+                    value={routingNumber}
+                    onChange={e => { setRoutingNumber(e.target.value.replace(/\D/g, '').slice(0, 9)); setError(''); }}
+                    placeholder="e.g. 021000021"
+                    maxLength={9}
+                    className="w-full px-4 py-3 border border-secondary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                  />
+                  <p className="text-xs text-secondary-400 mt-1">Bottom left of your check</p>
                 </div>
               </div>
             </>
@@ -451,9 +591,13 @@ const Withdrawal = () => {
             </div>
           )}
 
-          {/* Submit */}
-          <button type="submit" className="w-full py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all">
+          {/* Review button */}
+          <button
+            type="submit"
+            className="w-full py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all flex items-center justify-center gap-2"
+          >
             Review Withdrawal
+            <ChevronRight className="w-4 h-4" />
           </button>
         </form>
       </div>
