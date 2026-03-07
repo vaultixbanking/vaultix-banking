@@ -5,15 +5,24 @@ import { api } from '../../lib/api';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const cryptoOptions = [
-  { value: 'bitcoin',  label: 'Bitcoin',  symbol: 'BTC',  icon: '₿' },
-  { value: 'ethereum', label: 'Ethereum', symbol: 'ETH',  icon: 'Ξ' },
-  { value: 'litecoin', label: 'Litecoin', symbol: 'LTC',  icon: 'Ł' },
-  { value: 'usdt',     label: 'Tether',   symbol: 'USDT', icon: '₮' },
+  { value: 'bitcoin', label: 'Bitcoin', symbol: 'BTC', icon: '₿', networkHint: 'BTC Network' },
+  { value: 'ethereum', label: 'Ethereum', symbol: 'ETH', icon: 'Ξ', networkHint: 'ERC20' },
+  { value: 'litecoin', label: 'Litecoin', symbol: 'LTC', icon: 'Ł', networkHint: 'LTC Network' },
+  { value: 'usdt', label: 'Tether', symbol: 'USDT', icon: '₮', networkHint: 'TRC20 / ERC20' },
 ];
 
 interface DepositInfo {
   address: string;
   network: string;
+}
+
+interface DepositAddressResponse {
+  success: boolean;
+  message: string;
+  data: {
+    address: string;
+    network: string;
+  };
 }
 
 const OnlineDeposit = () => {
@@ -33,16 +42,26 @@ const OnlineDeposit = () => {
   const fetchDepositInfo = async (type: string) => {
     setLoadingAddress(true);
     setDepositInfo({ address: '', network: '' });
+    setError('');
     try {
-      const res = await api<{ success: boolean; address: string; network: string }>(
+      const res = await api<DepositAddressResponse>(
         `/api/admin/deposit/${type}`
       );
+
+      const address = res.data?.address?.trim();
+      const network = res.data?.network?.trim() || '';
+
       setDepositInfo({
-        address: res.address || 'Address not available',
-        network: res.network || '',
+        address: address || 'Address not available',
+        network,
       });
+
+      if (!address) {
+        setError('Wallet address is unavailable for this asset.');
+      }
     } catch {
       setDepositInfo({ address: 'Address not available', network: '' });
+      setError('Failed to load wallet address. Please try again.');
     } finally {
       setLoadingAddress(false);
     }
@@ -211,17 +230,18 @@ const OnlineDeposit = () => {
                   <span className="text-lg block mb-1">{opt.icon}</span>
                   <span className="text-xs font-semibold block">{opt.label}</span>
                   <span className="text-xs text-secondary-400">{opt.symbol}</span>
+                  <span className="text-[10px] text-secondary-400 block mt-0.5">{opt.networkHint}</span>
                 </button>
               ))}
             </div>
           </div>
 
           {/* Network Badge */}
-          {!loadingAddress && depositInfo.network && (
+          {!loadingAddress && (depositInfo.network || selectedCrypto?.networkHint) && (
             <div className="flex items-center gap-2">
               <span className="text-sm text-secondary-500">Network:</span>
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                {depositInfo.network}
+                {depositInfo.network || selectedCrypto?.networkHint}
               </span>
               {cryptoType === 'bitcoin' && (
                 <span className="text-xs text-secondary-400">(fixed network)</span>
