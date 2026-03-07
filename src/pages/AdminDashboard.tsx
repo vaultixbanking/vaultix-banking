@@ -12,21 +12,25 @@ import {
   Shield,
   ChevronRight,
   DollarSign,
+  ArrowDownToLine,
 } from 'lucide-react';
 
 import AdminHome from '../components/admin/AdminHome';
 import AdminUsers from '../components/admin/AdminUsers';
 import AdminDeposit from '../components/admin/AdminDeposit';
+import AdminDepositRequests from '../components/admin/AdminDepositRequests';
 import AdminBLC from '../components/admin/AdminBLC';
 import AdminTransactions from '../components/admin/AdminTransactions';
 import AdminSettings from '../components/admin/AdminSettings';
 
-type Section = 'home' | 'users' | 'deposit' | 'blc' | 'transactions' | 'settings';
+
+type Section = 'home' | 'users' | 'deposit' | 'deposit-requests' | 'blc' | 'transactions' | 'settings';
 
 const navItems: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: 'home', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
   { id: 'users', label: 'Users', icon: <Users className="w-5 h-5" /> },
   { id: 'deposit', label: 'Deposit Methods', icon: <Wallet className="w-5 h-5" /> },
+  { id: 'deposit-requests', label: 'Deposit Requests', icon: <ArrowDownToLine className="w-5 h-5" /> },
   { id: 'blc', label: 'Account Funding', icon: <DollarSign className="w-5 h-5" /> },
   { id: 'transactions', label: 'Transactions', icon: <ArrowRightLeft className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
@@ -74,6 +78,7 @@ const AdminDashboard = () => {
       case 'home': return <AdminHome />;
       case 'users': return <AdminUsers />;
       case 'deposit': return <AdminDeposit />;
+      case 'deposit-requests': return <AdminDepositRequests />;
       case 'blc': return <AdminBLC />;
       case 'transactions': return <AdminTransactions />;
       case 'settings': return <AdminSettings onLogout={handleLogout} />;
