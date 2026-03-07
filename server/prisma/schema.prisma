@@ -63,6 +63,7 @@ model User {
   // ─── Relations ─────────────────────────────────────────────────────────────
   withdrawals         Withdrawal[]
   fundingTransactions FundingTransaction[]
+  depositRequests     DepositRequest[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -80,7 +81,6 @@ model Withdrawal {
   details        Json?
   status         String   @default("PENDING")
 
-  // Relation to User
   userId         String
   user           User     @relation(fields: [userId], references: [id])
 
@@ -89,14 +89,37 @@ model Withdrawal {
   @@map("withdrawals")
 }
 
-// ─── Deposit Method (admin-managed crypto/fiat addresses) ───────────────────
+// ─── Deposit Method (admin-managed crypto addresses + network) ───────────────
 
 model DepositMethod {
-  id      String @id @default(cuid())
-  method  String @unique
-  details String
+  id      String  @id @default(cuid())
+  method  String  @unique      // e.g. "btc", "eth", "usdt", "ltc"
+  details String               // wallet address
+  network String  @default("") // e.g. "Bitcoin Network", "ERC20", "TRC20"
 
   @@map("deposit_methods")
+}
+
+// ─── Deposit Request (user-submitted deposit for admin review) ───────────────
+
+model DepositRequest {
+  id            String   @id @default(cuid())
+  requestId     String   @unique            // e.g. DEP-1234567890-ABCDE
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+
+  amount        Float                        // USD amount user claims to have sent
+  cryptoType    String                       // e.g. "bitcoin", "ethereum"
+  network       String                       // network used e.g. "ERC20"
+  walletAddress String                       // the admin wallet address they sent to
+  receiptPath   String?                      // uploaded receipt file path
+  status        String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  adminNote     String?                      // admin can add a note when reviewing
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("deposit_requests")
 }
 
 // ─── Funding Transaction (admin credit operations) ──────────────────────────

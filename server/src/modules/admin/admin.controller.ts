@@ -10,8 +10,15 @@ import {
   getUserFundingHistoryService,
   getAdminStatsService,
   getAllTransactionsService,
+  getAllDepositRequestsService,
+  updateDepositRequestStatusService,
 } from './admin.service';
+import { isValidDepositStatus, DepositStatus } from '../../constants/depositStatus';
 
+/**
+ * Admin login
+ * POST /api/admin/login
+ */
 export const adminLogin = async (
   req: Request,
   res: Response,
@@ -39,14 +46,15 @@ export const getDepositMethods = async (
   }
 };
 
+// Updated: now passes network from request body
 export const upsertDepositMethod = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { method, details } = req.body;
-    const data = await upsertDepositMethodService(method, details);
+    const { method, details, network } = req.body;
+    const data = await upsertDepositMethodService(method, details, network);
     res.status(200).json({ success: true, message: `${method} deposit method saved.`, data });
   } catch (err) {
     next(err);
@@ -149,6 +157,57 @@ export const getAllTransactions = async (
   try {
     const data = await getAllTransactionsService();
     res.status(200).json({ success: true, message: 'Transactions fetched.', data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Deposit Requests (admin view) ───────────────────────────────────────────
+
+export const getAllDepositRequests = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const data = await getAllDepositRequestsService();
+    res.status(200).json({ success: true, message: 'Deposit requests fetched.', data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Update deposit request status (approve/reject)
+ * PATCH /api/admin/deposit-requests/:requestId/status
+ */
+export const updateDepositRequestStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { status, adminNote } = req.body;
+    
+    if (!isValidDepositStatus(status) || status === 'PENDING') {
+      res.status(400).json({ 
+        success: false, 
+        message: 'Status must be either APPROVED or REJECTED.' 
+      });
+      return;
+    }
+    
+    const data = await updateDepositRequestStatusService(
+      req.params.requestId,
+      status as DepositStatus,
+      adminNote
+    );
+    
+    res.status(200).json({ 
+      success: true, 
+      message: `Deposit request ${status.toLowerCase()}.`, 
+      data 
+    });
   } catch (err) {
     next(err);
   }

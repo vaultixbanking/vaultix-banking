@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Copy, Upload, Check, AlertCircle, ArrowDownToLine } from 'lucide-react';
+import { Copy, Upload, Check, AlertCircle, ArrowDownToLine, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 const cryptoOptions = [
-  { value: 'bitcoin', label: 'Bitcoin', symbol: 'BTC', icon: '₿' },
-  { value: 'ethereum', label: 'Ethereum', symbol: 'ETH', icon: 'Ξ' },
-  { value: 'litecoin', label: 'Litecoin', symbol: 'LTC', icon: 'Ł' },
-  { value: 'usdt', label: 'Tether', symbol: 'USDT', icon: '₮' },
+  { value: 'bitcoin',  label: 'Bitcoin',  symbol: 'BTC',  icon: '₿' },
+  { value: 'ethereum', label: 'Ethereum', symbol: 'ETH',  icon: 'Ξ' },
+  { value: 'litecoin', label: 'Litecoin', symbol: 'LTC',  icon: 'Ł' },
+  { value: 'usdt',     label: 'Tether',   symbol: 'USDT', icon: '₮' },
 ];
 
 interface DepositInfo {
@@ -15,17 +17,19 @@ interface DepositInfo {
 }
 
 const OnlineDeposit = () => {
-  const [amount, setAmount] = useState('');
-  const [cryptoType, setCryptoType] = useState('bitcoin');
-  const [depositInfo, setDepositInfo] = useState<DepositInfo>({ address: '', network: '' });
+  const [amount, setAmount]                 = useState('');
+  const [cryptoType, setCryptoType]         = useState('bitcoin');
+  const [depositInfo, setDepositInfo]       = useState<DepositInfo>({ address: '', network: '' });
   const [loadingAddress, setLoadingAddress] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [receipt, setReceipt] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState('');
+  const [copied, setCopied]                 = useState(false);
+  const [receipt, setReceipt]               = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl]         = useState('');
+  const [submitting, setSubmitting]         = useState(false);
+  const [success, setSuccess]               = useState(false);
+  const [successData, setSuccessData]       = useState<{ requestId: string; amount: number } | null>(null);
+  const [error, setError]                   = useState('');
 
+  // ─── Fetch wallet address + network whenever crypto changes ───────────────
   const fetchDepositInfo = async (type: string) => {
     setLoadingAddress(true);
     setDepositInfo({ address: '', network: '' });
@@ -48,6 +52,7 @@ const OnlineDeposit = () => {
     fetchDepositInfo(cryptoType);
   }, [cryptoType]);
 
+  // ─── Copy address ──────────────────────────────────────────────────────────
   const handleCopy = async () => {
     if (!depositInfo.address || depositInfo.address === 'Address not available') return;
     try {
@@ -59,6 +64,7 @@ const OnlineDeposit = () => {
     }
   };
 
+  // ─── Receipt file picker ───────────────────────────────────────────────────
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -67,44 +73,87 @@ const OnlineDeposit = () => {
     }
   };
 
+  // ─── Submit deposit ────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!amount || parseFloat(amount) <= 0) return setError('Enter a valid amount');
-    if (!receipt) return setError('Please upload a payment receipt');
+    if (!amount || parseFloat(amount) <= 0) return setError('Enter a valid amount.');
+    if (!receipt) return setError('Please upload a payment receipt.');
+    if (depositInfo.address === 'Address not available') {
+      return setError('Wallet address is unavailable. Please try again.');
+    }
 
     setSubmitting(true);
     try {
-      // NOTE: Deposit endpoint will be wired up during API implementation phase
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const token = localStorage.getItem('vaultix_token');
+
+      // Use FormData because we're uploading a file
+      const formData = new FormData();
+      formData.append('amount', amount);
+      formData.append('cryptoType', cryptoType);
+      formData.append('network', depositInfo.network);
+      formData.append('walletAddress', depositInfo.address);
+      formData.append('receipt', receipt);
+
+      // Can't use the api() helper for file uploads — fetch directly
+      const response = await fetch(`${API_URL}/api/deposits`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          // Do NOT set Content-Type — browser sets it with boundary for FormData
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Deposit submission failed.');
+      }
+
+      setSuccessData({ requestId: data.data.requestId, amount: data.data.amount });
       setSuccess(true);
       setAmount('');
       setReceipt(null);
       setPreviewUrl('');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Deposit submission failed');
+      setError(err instanceof Error ? err.message : 'Deposit submission failed.');
     } finally {
       setSubmitting(false);
     }
   };
 
+  // ─── Success screen ────────────────────────────────────────────────────────
   if (success) {
     return (
-      <div className="w-full text-center py-16">
+      <div className="w-full text-center py-16 px-6">
         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Check className="w-8 h-8 text-green-600" />
         </div>
         <h2 className="text-2xl font-bold text-secondary-900 mb-2">Deposit Submitted!</h2>
-        <p className="text-secondary-500 mb-6">
-          Your deposit is being reviewed. Funds will be credited once confirmed on-chain.
+        <p className="text-secondary-500 mb-2">
+          Your deposit request has been received and is under review.
         </p>
-        <button
-          onClick={() => setSuccess(false)}
-          className="px-6 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors"
-        >
-          Make Another Deposit
-        </button>
+        <p className="text-secondary-400 text-sm mb-1">
+          Funds will be credited once our team confirms your transaction.
+        </p>
+        {successData && (
+          <div className="mt-4 inline-flex flex-col items-center gap-1 bg-secondary-50 border border-secondary-200 rounded-xl px-6 py-4">
+            <p className="text-xs text-secondary-400">Request ID</p>
+            <p className="text-sm font-mono font-semibold text-secondary-700">{successData.requestId}</p>
+            <p className="text-xs text-secondary-400 mt-2">Amount</p>
+            <p className="text-sm font-bold text-primary-600">${successData.amount.toLocaleString()}</p>
+          </div>
+        )}
+        <div className="mt-6">
+          <button
+            onClick={() => { setSuccess(false); setSuccessData(null); }}
+            className="px-6 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors"
+          >
+            Make Another Deposit
+          </button>
+        </div>
       </div>
     );
   }
@@ -180,7 +229,7 @@ const OnlineDeposit = () => {
             </div>
           )}
 
-          {/* Wallet Address — copy icon inside field */}
+          {/* Wallet Address */}
           <div>
             <label className="block text-sm font-medium text-secondary-700 mb-2">
               {selectedCrypto?.label} Wallet Address
@@ -196,7 +245,8 @@ const OnlineDeposit = () => {
                 type="button"
                 onClick={handleCopy}
                 title="Copy address"
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-secondary-400 hover:text-primary-600 hover:bg-primary-50 transition-all"
+                disabled={loadingAddress}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-secondary-400 hover:text-primary-600 hover:bg-primary-50 transition-all disabled:opacity-40"
               >
                 {copied
                   ? <Check className="w-4 h-4 text-green-500" />
@@ -217,7 +267,7 @@ const OnlineDeposit = () => {
           {/* Receipt Upload */}
           <div>
             <label className="block text-sm font-medium text-secondary-700 mb-2">
-              Upload Payment Receipt
+              Upload Payment Receipt <span className="text-red-400">*</span>
             </label>
             <div
               className="border-2 border-dashed border-secondary-200 rounded-xl p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
@@ -257,21 +307,19 @@ const OnlineDeposit = () => {
           {/* Submit */}
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || loadingAddress}
             className="w-full py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {submitting ? (
               <>
-                <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Processing...
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Submitting...
               </>
             ) : (
               'Submit Deposit'
             )}
           </button>
+
         </form>
       </div>
     </div>

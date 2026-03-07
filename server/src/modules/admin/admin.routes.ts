@@ -10,31 +10,37 @@ import {
   getUserFundingHistory,
   getAdminStats,
   getAllTransactions,
+  getAllDepositRequests,
+  updateDepositRequestStatus,
 } from './admin.controller';
 import { authenticate } from '../../middleware/auth';
 
 const router = Router();
 
-// ─── Auth ───────────────────────────────────────────────────────────────────
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 router.post('/login', adminLogin);
 
-// ─── Dashboard Stats (protected) ───────────────────────────────────────────
+// ─── Dashboard Stats (protected) ─────────────────────────────────────────────
 router.get('/stats', authenticate, getAdminStats);
 
-// ─── Users Management (protected) ──────────────────────────────────────────
+// ─── Users Management (protected) ────────────────────────────────────────────
 router.get('/users', authenticate, getAllUsers);
 router.get('/users/:accountNumber', authenticate, getUserByAccount);
 router.post('/users/:accountNumber/credit', authenticate, creditUserAccount);
 router.get('/users/:accountNumber/funding-history', authenticate, getUserFundingHistory);
 
-// ─── Deposit Methods (protected) ───────────────────────────────────────────
+// ─── Deposit Methods (protected) ─────────────────────────────────────────────
 router.get('/deposit-methods', authenticate, getDepositMethods);
 router.post('/deposit-methods', authenticate, upsertDepositMethod);
 
-// ─── Deposit Address by Crypto Type (public — used by user deposit page) ───
+// ─── Deposit Address by Crypto Type (public — used by user deposit page) ─────
 router.get('/deposit/:cryptoType', getDepositByCrypto);
 
-// ─── Transactions (protected) ──────────────────────────────────────────────
+// ─── Deposit Requests (admin review) ─────────────────────────────────────────
+router.get('/deposit-requests', authenticate, getAllDepositRequests);
+router.patch('/deposit-requests/:requestId/status', authenticate, updateDepositRequestStatus);
+
+// ─── Transactions (protected) ─────────────────────────────────────────────────
 router.get('/transactions', authenticate, getAllTransactions);
 
 export default router;

@@ -2,9 +2,14 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/database';
 import { generateToken } from '../../utils/jwt';
 import { sendCreditNotification } from '../../utils/email';
+import { DepositMethodResponse } from '../../types/deposit.types';
+import { DepositStatus } from '../../constants/depositStatus';
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
+/**
+ * Admin login service
+ */
 export const adminLoginService = async (username: string, password: string) => {
   const admin = await prisma.admin.findUnique({ where: { username } });
 
@@ -36,19 +41,32 @@ export const adminLoginService = async (username: string, password: string) => {
 
 // ─── Deposit Methods ────────────────────────────────────────────────────────
 
+/**
+ * Get all deposit methods (crypto addresses + networks)
+ */
 export const getAllDepositMethodsService = async () => {
   return prisma.depositMethod.findMany();
 };
 
-export const upsertDepositMethodService = async (method: string, details: string) => {
+/**
+ * Create or update a deposit method (admin wallet address + network)
+ */
+export const upsertDepositMethodService = async (
+  method: string,
+  details: string,
+  network: string = ''
+) => {
   return prisma.depositMethod.upsert({
     where: { method },
-    update: { details },
-    create: { method, details },
+    update: { details, network },
+    create: { method, details, network },
   });
 };
 
-export const getDepositMethodByCryptoService = async (cryptoType: string) => {
+/**
+ * Get deposit method details by crypto type (for user deposit page)
+ */
+export const getDepositMethodByCryptoService = async (cryptoType: string): Promise<DepositMethodResponse> => {
   const methodMap: Record<string, string> = {
     bitcoin: 'btc',
     ethereum: 'eth',
@@ -70,11 +88,17 @@ export const getDepositMethodByCryptoService = async (cryptoType: string) => {
     throw Object.assign(new Error('Deposit method not found.'), { statusCode: 404 });
   }
 
-  return { address: depositMethod.details };
+  return {
+    address: depositMethod.details,
+    network: depositMethod.network || '',
+  };
 };
 
 // ─── User Management ────────────────────────────────────────────────────────
 
+/**
+ * Get all users (for admin user list)
+ */
 export const getAllUsersService = async () => {
   return prisma.user.findMany({
     select: {
@@ -93,6 +117,9 @@ export const getAllUsersService = async () => {
   });
 };
 
+/**
+ * Get user by account number (full details)
+ */
 export const getUserByAccountService = async (accountNumber: string) => {
   const user = await prisma.user.findUnique({
     where: { accountNumber },
@@ -127,6 +154,10 @@ export const getUserByAccountService = async (accountNumber: string) => {
   return user;
 };
 
+/**
+ * Credit user account (admin funding operation)
+ * Creates FundingTransaction record and updates balance atomically
+ */
 export const creditUserAccountService = async (
   accountNumber: string,
   amount: number,
@@ -185,6 +216,9 @@ export const creditUserAccountService = async (
   return { user: updatedUser, transaction: fundingTx };
 };
 
+/**
+ * Get user's funding transaction history
+ */
 export const getUserFundingHistoryService = async (accountNumber: string) => {
   const user = await prisma.user.findUnique({
     where: { accountNumber },
@@ -213,10 +247,11 @@ export const getUserFundingHistoryService = async (accountNumber: string) => {
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
 export const getAdminStatsService = async () => {
-  const [totalUsers, totalWithdrawals, depositMethods] = await Promise.all([
+  const [totalUsers, totalWithdrawals, depositMethods, totalDepositRequests] = await Promise.all([
     prisma.user.count(),
     prisma.withdrawal.count(),
     prisma.depositMethod.count(),
+    prisma.depositRequest.count(),
   ]);
 
   const users = await prisma.user.findMany({ select: { totalBalance: true } });
@@ -230,11 +265,17 @@ export const getAdminStatsService = async () => {
     },
   });
 
+  const pendingDeposits = await prisma.depositRequest.count({
+    where: { status: 'PENDING' },
+  });
+
   return {
     totalUsers,
     totalWithdrawals,
     totalBalance,
     depositMethods,
+    totalDepositRequests,
+    pendingDeposits,
     recentWithdrawals,
   };
 };
@@ -247,5 +288,41 @@ export const getAllTransactionsService = async () => {
     include: {
       user: { select: { fullName: true, accountNumber: true } },
     },
+  });
+};
+
+// ─── Deposit Requests (admin view) ──────────────────────────────────────────
+
+/**
+ * Get all deposit requests (for admin review)
+ */
+export const getAllDepositRequestsService = async () => {
+  return prisma.depositRequest.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: {
+      user: {
+        select: { fullName: true, accountNumber: true, emailAddress: true },
+      },
+    },
+  });
+};
+
+/**
+ * Update deposit request status (approve or reject)
+ */
+export const updateDepositRequestStatusService = async (
+  requestId: string,
+  status: DepositStatus,
+  adminNote?: string
+) => {
+  const deposit = await prisma.depositRequest.findUnique({ where: { requestId } });
+
+  if (!deposit) {
+    throw Object.assign(new Error('Deposit request not found.'), { statusCode: 404 });
+  }
+
+  return prisma.depositRequest.update({
+    where: { requestId },
+    data: { status, adminNote },
   });
 };
