@@ -48,7 +48,7 @@ export const withdrawService = async (userId: string, body: WithdrawBody) => {
     }),
   ]);
 
-  // Send debit notification email (non-blocking)
+  // Send debit notification email (non-blocking) with type-specific details
   sendDebitNotification(
     user.emailAddress,
     user.fullName,
@@ -56,7 +56,8 @@ export const withdrawService = async (userId: string, body: WithdrawBody) => {
     user.currencyType,
     updatedUser.totalBalance,
     withdrawalType,
-    txnId
+    txnId,
+    details as Record<string, unknown> | undefined
   ).catch((err) => {
     console.error('[WITHDRAWAL] Failed to send debit notification:', err);
   });

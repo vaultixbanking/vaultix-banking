@@ -119,10 +119,10 @@ const Dashboard = () => {
           {/* Logo */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-secondary-100">
             <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-r from-primary-600 to-primary-800 p-2 rounded-xl">
+              <div className="bg-linear-to-r from-primary-600 to-primary-800 p-2 rounded-xl">
                 <Shield className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-primary-700 to-primary-900 bg-clip-text text-transparent">
+              <span className="text-xl font-bold bg-linear-to-r from-primary-700 to-primary-900 bg-clip-text text-transparent">
                 Vaultix
               </span>
             </div>
@@ -161,7 +161,7 @@ const Dashboard = () => {
           {/* User info + logout */}
           <div className="border-t border-secondary-100 p-4">
             <div className="flex items-center gap-3 mb-3 px-2">
-              <div className="w-10 h-10 bg-gradient-to-r from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm">
+              <div className="w-10 h-10 bg-linear-to-r from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm">
                 {user.fullName?.[0]?.toUpperCase() || 'U'}
               </div>
               <div className="flex-1 min-w-0">
@@ -203,7 +203,7 @@ const Dashboard = () => {
                 <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
               </button>
               <div className="hidden sm:flex items-center gap-2 ml-2">
-                <div className="w-8 h-8 bg-gradient-to-r from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                <div className="w-8 h-8 bg-linear-to-r from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-xs">
                   {user.fullName?.[0]?.toUpperCase() || 'U'}
                 </div>
                 <span className="text-sm font-medium text-secondary-700">{user.fullName?.split(' ')[0]}</span>
