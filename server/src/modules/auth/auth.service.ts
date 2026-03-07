@@ -1,7 +1,9 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/database';
 import { generateToken } from '../../utils/jwt';
 import { generateAccountNumber } from '../../utils/helpers';
+import { sendVerificationEmail, sendWelcomeEmail } from '../../utils/email';
 import { SignupBody, LoginBody } from '../../types';
 
 export const signupService = async (
@@ -30,6 +32,10 @@ export const signupService = async (
     bcrypt.hash(body.pin, 10),
   ]);
 
+  // Generate email verification token (URL-safe random string)
+  const verificationToken = crypto.randomBytes(32).toString('hex');
+  const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
   const user = await prisma.user.create({
     data: {
       fullName: body.fullName,
@@ -41,7 +47,7 @@ export const signupService = async (
       state: body.state || null,
       zipCode: body.zipCode || null,
       residentialAddress: body.residentialAddress || null,
-      phone: body.phone || null,
+      phone: body.phone,
       alternatePhone: body.alternatePhone || null,
       employmentStatus: body.employmentStatus || null,
       occupation: body.occupation || null,
@@ -58,13 +64,25 @@ export const signupService = async (
       idExpiryDate: body.idExpiryDate || null,
       photoID: photoIDPath,
       accountNumber: generateAccountNumber(),
+      emailVerified: false,
+      emailVerificationToken: verificationToken,
+      emailVerificationExpiry: verificationExpiry,
     },
+  });
+
+  // Send verification email (non-blocking — don't fail signup if email fails)
+  const apiUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
+  const verificationLink = `${apiUrl}/api/auth/verify-email/${verificationToken}`;
+
+  sendVerificationEmail(emailAddress, user.fullName, verificationLink).catch((err) => {
+    console.error('[SIGNUP] Failed to send verification email:', err);
   });
 
   return {
     accountNumber: user.accountNumber,
     username: user.username,
     fullName: user.fullName,
+    message: 'Please check your email to verify your account.',
   };
 };
 
@@ -82,6 +100,10 @@ export const loginService = async (body: LoginBody) => {
 
   if (!user) {
     throw Object.assign(new Error('Invalid credentials. User not found.'), { statusCode: 401 });
+  }
+
+  if (!user.emailVerified) {
+    throw Object.assign(new Error('Please verify your email address before logging in. Check your inbox for the verification link.'), { statusCode: 403 });
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -108,6 +130,72 @@ export const loginService = async (body: LoginBody) => {
       totalBalance: user.totalBalance,
     },
   };
+};
+
+export const verifyEmailService = async (token: string) => {
+  const user = await prisma.user.findUnique({
+    where: { emailVerificationToken: token },
+  });
+
+  if (!user) {
+    throw Object.assign(new Error('Invalid verification link.'), { statusCode: 400 });
+  }
+
+  if (user.emailVerified) {
+    return { alreadyVerified: true };
+  }
+
+  if (user.emailVerificationExpiry && user.emailVerificationExpiry < new Date()) {
+    throw Object.assign(new Error('Verification link has expired. Please request a new one.'), { statusCode: 400 });
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      emailVerified: true,
+      emailVerificationToken: null,
+      emailVerificationExpiry: null,
+    },
+  });
+
+  // Send welcome email (non-blocking)
+  console.log(`[VERIFY] Email verified for ${user.emailAddress}. Triggering welcome email...`);
+  sendWelcomeEmail(user.emailAddress, user.fullName, user.accountNumber).catch((err) => {
+    console.error('[VERIFY] Failed to send welcome email:', err);
+  });
+
+  return { alreadyVerified: false };
+};
+
+export const resendVerificationService = async (email: string) => {
+  const user = await prisma.user.findUnique({
+    where: { emailAddress: email.toLowerCase() },
+  });
+
+  if (!user) {
+    throw Object.assign(new Error('No account found with that email.'), { statusCode: 404 });
+  }
+
+  if (user.emailVerified) {
+    throw Object.assign(new Error('Email is already verified.'), { statusCode: 400 });
+  }
+
+  const verificationToken = crypto.randomBytes(32).toString('hex');
+  const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      emailVerificationToken: verificationToken,
+      emailVerificationExpiry: verificationExpiry,
+    },
+  });
+
+  const apiUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
+  const verificationLink = `${apiUrl}/api/auth/verify-email/${verificationToken}`;
+  await sendVerificationEmail(user.emailAddress, user.fullName, verificationLink);
+
+  return { message: 'Verification email sent.' };
 };
 
 export const verifyPinService = async (userId: string, pin: string) => {

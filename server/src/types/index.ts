@@ -25,7 +25,7 @@ export interface SignupBody {
   zipCode?: string;
   residentialAddress?: string;
   email: string;          // mapped to emailAddress in DB
-  phone?: string;
+  phone: string;          // required — no bank omits phone number
   alternatePhone?: string;
 
   // Step 2 — Employment & Financial

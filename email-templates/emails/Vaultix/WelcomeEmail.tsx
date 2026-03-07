@@ -10,7 +10,6 @@ import {
   Heading,
   Section,
   Hr,
-  Img,
   Row,
   Column,
   Button
@@ -20,188 +19,157 @@ import { Tailwind } from '@react-email/tailwind';
 interface WelcomeEmailProps {
   username: string;
   accountNumber?: string;
-  verificationLink?: string;
 }
 
 const WelcomeEmail: React.FC<WelcomeEmailProps> = ({
   username = 'there',
-  accountNumber = '****1234',
-  verificationLink = 'https://vaultix.com/verify'
+  accountNumber = '8881234567',
 }) => {
-  const previewText = `Welcome to Vaultix - Your financial journey begins here`;
-
   return (
     <Html>
       <Head />
-      <Preview>{previewText}</Preview>
+      <Preview>Welcome to Vaultix, {username}! Your account is ready.</Preview>
       <Tailwind>
-        <Body className="bg-gray-50 font-sans">
-          <Container className="max-w-2xl mx-auto p-8">
-            {/* Header with Logo */}
-            <Section className="text-center mb-8">
-              <Img
-                src="https://placehold.co/150x50/2563eb/white?text=Vaultix"
-                alt="Vaultix"
-                width="150"
-                height="50"
-                className="mx-auto"
-              />
-            </Section>
-
-            {/* Main Content Card */}
-            <Section className="bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
-              {/* Hero Icon */}
-              <Section className="text-center mb-6">
-                <div className="bg-gradient-to-r from-blue-600 to-blue-700 w-16 h-16 rounded-full mx-auto flex items-center justify-center">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <path d="M20 12H4M12 4v16" />
+        <Body className="bg-gray-100 font-sans">
+          <Container className="max-w-xl mx-auto py-10 px-4">
+            <Section className="bg-white rounded-2xl overflow-hidden shadow-lg">
+              {/* Header */}
+              <Section className="bg-blue-700 py-8 px-8 text-center">
+                <Section className="mx-auto mb-3">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto' }}>
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   </svg>
-                </div>
+                </Section>
+                <Text className="text-white text-xl font-bold m-0">Vaultix</Text>
               </Section>
 
-              {/* Welcome Heading */}
-              <Heading className="text-3xl font-bold text-center mb-4 text-gray-900">
-                Welcome to Vaultix, {username}! 🎉
-              </Heading>
+              {/* Body */}
+              <Section className="px-8 pt-8 pb-4">
+                {/* Check Icon */}
+                <Section className="text-center mb-6">
+                  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ margin: '0 auto' }}>
+                    <circle cx="24" cy="24" r="24" fill="#2563eb" />
+                    <polyline points="16,24 22,30 32,18" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </Section>
 
-              <Text className="text-gray-600 text-center mb-8 text-lg">
-                Your secure financial journey begins here. We're thrilled to have you on board!
-              </Text>
+                <Heading className="text-2xl font-bold text-center text-gray-900 mb-2">
+                  Welcome to Vaultix, {username}! 🎉
+                </Heading>
+                <Text className="text-gray-500 text-center text-base mb-6 leading-relaxed">
+                  Your email has been verified and your secure banking account is now fully active. We're thrilled to have you on board!
+                </Text>
 
-              {/* Account Information */}
-              <Section className="bg-blue-50 rounded-xl p-6 mb-8 border border-blue-100">
-                <Row>
-                  <Column align="center">
-                    <Text className="text-blue-800 font-medium mb-2">Your Account Number</Text>
-                    <Text className="text-2xl font-bold text-blue-900 font-mono">
-                      {accountNumber}
-                    </Text>
+                {/* Account Number Box */}
+                <Section className="bg-blue-50 border border-blue-200 rounded-xl py-5 px-6 mb-6 text-center">
+                  <Text className="text-blue-800 text-xs font-semibold uppercase tracking-wide mb-1">
+                    Your Account Number
+                  </Text>
+                  <Text className="text-blue-900 text-2xl font-bold font-mono m-0">
+                    {accountNumber}
+                  </Text>
+                </Section>
+
+                {/* Features */}
+                <Row className="mb-6">
+                  <Column className="text-center px-2">
+                    <Section className="bg-gray-50 border border-gray-200 rounded-xl py-4 px-3">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" style={{ margin: '0 auto 8px' }}>
+                        <rect x="1" y="4" width="22" height="16" rx="2" />
+                        <line x1="1" y1="10" x2="23" y2="10" />
+                      </svg>
+                      <Text className="text-gray-900 text-xs font-semibold m-0">Secure Banking</Text>
+                      <Text className="text-gray-400 text-xs m-0">256-bit encryption</Text>
+                    </Section>
+                  </Column>
+                  <Column className="text-center px-2">
+                    <Section className="bg-gray-50 border border-gray-200 rounded-xl py-4 px-3">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" style={{ margin: '0 auto 8px' }}>
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      <Text className="text-gray-900 text-xs font-semibold m-0">24/7 Access</Text>
+                      <Text className="text-gray-400 text-xs m-0">Bank anytime</Text>
+                    </Section>
+                  </Column>
+                  <Column className="text-center px-2">
+                    <Section className="bg-gray-50 border border-gray-200 rounded-xl py-4 px-3">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" style={{ margin: '0 auto 8px' }}>
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      </svg>
+                      <Text className="text-gray-900 text-xs font-semibold m-0">FDIC Insured</Text>
+                      <Text className="text-gray-400 text-xs m-0">Up to $250,000</Text>
+                    </Section>
                   </Column>
                 </Row>
-              </Section>
 
-              {/* Features Grid */}
-              <Section className="mb-8">
-                <Row className="mb-4">
-                  <Column className="pr-3">
-                    <div className="bg-white p-4 rounded-xl border border-gray-200 text-center">
-                      <div className="bg-blue-100 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
-                          <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-                          <line x1="1" y1="10" x2="23" y2="10" />
-                        </svg>
-                      </div>
-                      <Text className="font-semibold text-gray-900">Secure Banking</Text>
-                      <Text className="text-sm text-gray-600">256-bit encryption</Text>
-                    </div>
-                  </Column>
-                  <Column className="px-3">
-                    <div className="bg-white p-4 rounded-xl border border-gray-200 text-center">
-                      <div className="bg-blue-100 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                      </div>
-                      <Text className="font-semibold text-gray-900">24/7 Access</Text>
-                      <Text className="text-sm text-gray-600">Bank anytime, anywhere</Text>
-                    </div>
-                  </Column>
-                  <Column className="pl-3">
-                    <div className="bg-white p-4 rounded-xl border border-gray-200 text-center">
-                      <div className="bg-blue-100 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
-                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                        </svg>
-                      </div>
-                      <Text className="font-semibold text-gray-900">FDIC Insured</Text>
-                      <Text className="text-sm text-gray-600">Up to $250,000</Text>
-                    </div>
-                  </Column>
-                </Row>
-              </Section>
+                {/* CTA */}
+                <Section className="text-center mb-6">
+                  <Button
+                    href="https://vaultixbank.org/login"
+                    className="bg-blue-700 text-white px-8 py-4 rounded-xl font-semibold text-base"
+                  >
+                    Go to Dashboard
+                  </Button>
+                </Section>
 
-              {/* Verification Button */}
-              <Section className="text-center mb-8">
-                <Button
-                  href={verificationLink}
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-4 rounded-xl font-semibold text-lg shadow-lg"
-                >
-                  Verify Your Email
-                </Button>
-              </Section>
+                <Hr className="border-gray-200 my-6" />
 
-              <Hr className="border-gray-200 my-6" />
-
-              {/* Next Steps */}
-              <Section>
-                <Heading className="text-xl font-semibold text-gray-900 mb-4">
+                {/* Next Steps */}
+                <Heading className="text-lg font-semibold text-gray-900 mb-4">
                   What's Next?
                 </Heading>
-                
-                <Row className="mb-4">
-                  <Column className="w-8 align-top">
-                    <div className="bg-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-white text-sm font-bold">1</div>
+
+                <Row className="mb-3">
+                  <Column className="w-8">
+                    <Text className="bg-blue-700 text-white text-xs font-bold w-6 h-6 leading-6 text-center rounded-full m-0">1</Text>
                   </Column>
-                  <Column className="pl-2">
-                    <Text className="text-gray-800 font-medium">Complete your profile</Text>
-                    <Text className="text-gray-600 text-sm">Add your preferences and security settings</Text>
+                  <Column>
+                    <Text className="text-gray-900 font-medium text-sm m-0">Complete your profile</Text>
+                    <Text className="text-gray-400 text-xs m-0">Add your preferences and security settings</Text>
+                  </Column>
+                </Row>
+                <Row className="mb-3">
+                  <Column className="w-8">
+                    <Text className="bg-blue-700 text-white text-xs font-bold w-6 h-6 leading-6 text-center rounded-full m-0">2</Text>
+                  </Column>
+                  <Column>
+                    <Text className="text-gray-900 font-medium text-sm m-0">Fund your account</Text>
+                    <Text className="text-gray-400 text-xs m-0">Make your first deposit and start growing</Text>
+                  </Column>
+                </Row>
+                <Row className="mb-3">
+                  <Column className="w-8">
+                    <Text className="bg-blue-700 text-white text-xs font-bold w-6 h-6 leading-6 text-center rounded-full m-0">3</Text>
+                  </Column>
+                  <Column>
+                    <Text className="text-gray-900 font-medium text-sm m-0">Send &amp; receive money</Text>
+                    <Text className="text-gray-400 text-xs m-0">Enjoy fast, secure transfers worldwide</Text>
                   </Column>
                 </Row>
 
-                <Row className="mb-4">
-                  <Column className="w-8 align-top">
-                    <div className="bg-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-white text-sm font-bold">2</div>
-                  </Column>
-                  <Column className="pl-2">
-                    <Text className="text-gray-800 font-medium">Set up mobile app</Text>
-                    <Text className="text-gray-600 text-sm">Download our app for on-the-go banking</Text>
-                  </Column>
-                </Row>
-
-                <Row className="mb-4">
-                  <Column className="w-8 align-top">
-                    <div className="bg-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-white text-sm font-bold">3</div>
-                  </Column>
-                  <Column className="pl-2">
-                    <Text className="text-gray-800 font-medium">Make your first deposit</Text>
-                    <Text className="text-gray-600 text-sm">Start earning interest today</Text>
-                  </Column>
-                </Row>
+                {/* Support */}
+                <Section className="bg-gray-50 rounded-xl p-5 mt-6">
+                  <Text className="text-gray-900 font-medium text-sm mb-1">Need help getting started?</Text>
+                  <Text className="text-gray-500 text-xs m-0">
+                    Our support team is here 24/7.{' '}
+                    <Link href="https://vaultixbank.org/support" className="text-blue-600 font-semibold underline">
+                      Contact Support &rarr;
+                    </Link>
+                  </Text>
+                </Section>
               </Section>
 
-              {/* Support Section */}
-              <Section className="bg-gray-50 rounded-xl p-6 mt-6">
-                <Text className="text-gray-800 font-medium mb-2">Need help getting started?</Text>
-                <Text className="text-gray-600 text-sm mb-3">
-                  Our support team is here 24/7 to assist you with any questions.
+              {/* Footer */}
+              <Section className="text-center px-8 py-6 border-t border-gray-100">
+                <Text className="text-gray-400 text-xs mb-1">&copy; 2025 Vaultix Bank. All rights reserved.</Text>
+                <Text className="text-gray-300 text-xs mb-2">123 Financial District, New York, NY 10001</Text>
+                <Text className="text-gray-300 text-xs m-0">
+                  <Link href="https://vaultixbank.org/privacy" className="text-gray-400 underline">Privacy Policy</Link>
+                  {' '}&bull;{' '}
+                  <Link href="https://vaultixbank.org/terms" className="text-gray-400 underline">Terms of Service</Link>
                 </Text>
-                <Link 
-                  href="https://vaultix.com/support"
-                  className="text-blue-600 font-medium text-sm underline"
-                >
-                  Contact Support →
-                </Link>
               </Section>
-            </Section>
-
-            {/* Footer */}
-            <Section className="text-center mt-8">
-              <Text className="text-sm text-gray-500 mb-3">
-                © 2025 Vaultix. All rights reserved.
-              </Text>
-              <Text className="text-xs text-gray-400">
-                123 Financial District, New York, NY 10001
-              </Text>
-              <Text className="text-xs text-gray-400 mt-2">
-                <Link href="https://vaultix.com/privacy" className="text-gray-400 underline mx-2">
-                  Privacy Policy
-                </Link>
-                •
-                <Link href="https://vaultix.com/terms" className="text-gray-400 underline mx-2">
-                  Terms of Service
-                </Link>
-              </Text>
             </Section>
           </Container>
         </Body>

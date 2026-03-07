@@ -23,7 +23,7 @@ model User {
   state              String?
   zipCode            String?
   residentialAddress String?
-  phone              String?
+  phone              String
   alternatePhone     String?
 
   // ─── Employment & Financial (Step 2) ────────────────────────────────────────
@@ -40,6 +40,11 @@ model User {
   accountNumber  String   @unique
   accountType    String   @default("Savings")
   currencyType   String   @default("USD")
+
+  // ─── Email Verification ────────────────────────────────────────────────────
+  emailVerified           Boolean   @default(false)
+  emailVerificationToken  String?   @unique
+  emailVerificationExpiry DateTime?
 
   // ─── ID Verification ───────────────────────────────────────────────────────
   idType         String?

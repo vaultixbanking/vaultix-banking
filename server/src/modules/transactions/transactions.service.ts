@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/database';
 import { generateTransactionId } from '../../utils/helpers';
+import { sendDebitNotification } from '../../utils/email';
 import { WithdrawBody } from '../../types';
 
 export const withdrawService = async (userId: string, body: WithdrawBody) => {
@@ -27,6 +28,8 @@ export const withdrawService = async (userId: string, body: WithdrawBody) => {
     throw Object.assign(new Error('Insufficient balance.'), { statusCode: 400 });
   }
 
+  const txnId = generateTransactionId('WD');
+
   // Deduct balance and create withdrawal record in a transaction
   const [updatedUser, withdrawal] = await prisma.$transaction([
     prisma.user.update({
@@ -36,7 +39,7 @@ export const withdrawService = async (userId: string, body: WithdrawBody) => {
     prisma.withdrawal.create({
       data: {
         userId,
-        transactionId: generateTransactionId('WD'),
+        transactionId: txnId,
         amount,
         withdrawalType,
         details: details as object,
@@ -44,6 +47,19 @@ export const withdrawService = async (userId: string, body: WithdrawBody) => {
       },
     }),
   ]);
+
+  // Send debit notification email (non-blocking)
+  sendDebitNotification(
+    user.emailAddress,
+    user.fullName,
+    amount,
+    user.currencyType,
+    updatedUser.totalBalance,
+    withdrawalType,
+    txnId
+  ).catch((err) => {
+    console.error('[WITHDRAWAL] Failed to send debit notification:', err);
+  });
 
   return {
     transactionId: withdrawal.transactionId,

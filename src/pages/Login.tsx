@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { 
   Mail, Lock, Eye, EyeOff, LogIn, 
   Shield, AlertCircle, Check, ArrowRight 
@@ -8,8 +8,11 @@ import {
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const signupSuccess = (location.state as { signupSuccess?: boolean; accountNumber?: string })?.signupSuccess;
   const signupAccountNumber = (location.state as { accountNumber?: string })?.accountNumber;
+  const needsVerification = (location.state as { needsVerification?: boolean })?.needsVerification;
+  const verifiedParam = searchParams.get('verified');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [formData, setFormData] = useState({
@@ -18,6 +21,8 @@ const Login: React.FC = () => {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
   const [loginMethod, setLoginMethod] = useState<'email' | 'username'>('email');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,6 +116,32 @@ const Login: React.FC = () => {
     navigate('/forgot-password');
   };
 
+  const handleResendVerification = async () => {
+    const email = formData.identifier;
+    if (!email || !email.includes('@')) {
+      setLoginError('Please enter your email address to resend the verification link.');
+      return;
+    }
+    setIsResending(true);
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${API_URL}/api/auth/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      setResendSuccess(true);
+      setLoginError('');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to resend verification email.';
+      setLoginError(message);
+    } finally {
+      setIsResending(false);
+    }
+  };
+
   const handleQuickBioLogin = () => {
     // Implement biometric login (fingerprint/face ID)
     console.log('Biometric login initiated');
@@ -160,6 +191,35 @@ const Login: React.FC = () => {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-6 md:p-8">
+            {/* Email Verified — redirected from verification link */}
+            {verifiedParam === 'true' && (
+              <div className="mb-5 p-4 bg-green-50 border border-green-200 rounded-xl flex items-start gap-3">
+                <Check className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-green-800">Email verified successfully!</p>
+                  <p className="text-sm text-green-600 mt-0.5">Your account is now active. Please sign in to continue.</p>
+                </div>
+              </div>
+            )}
+            {verifiedParam === 'already' && (
+              <div className="mb-5 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+                <Check className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Email already verified</p>
+                  <p className="text-sm text-blue-600 mt-0.5">Your account is active. Please sign in.</p>
+                </div>
+              </div>
+            )}
+            {verifiedParam === 'error' && (
+              <div className="mb-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-red-800">Verification failed</p>
+                  <p className="text-sm text-red-600 mt-0.5">{searchParams.get('message') || 'Invalid or expired verification link.'}</p>
+                </div>
+              </div>
+            )}
+
             {/* Signup Success Message */}
             {signupSuccess && (
               <div className="mb-5 p-4 bg-green-50 border border-green-200 rounded-xl flex items-start gap-3">
@@ -171,7 +231,22 @@ const Login: React.FC = () => {
                       Account: <span className="font-semibold tracking-wide">{signupAccountNumber}</span>
                     </p>
                   )}
-                  <p className="text-sm text-green-600 mt-0.5">Please sign in to continue.</p>
+                  {needsVerification ? (
+                    <p className="text-sm text-green-600 mt-0.5">Please check your email and verify your account before signing in.</p>
+                  ) : (
+                    <p className="text-sm text-green-600 mt-0.5">Please sign in to continue.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Resend Verification Success */}
+            {resendSuccess && (
+              <div className="mb-5 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+                <Mail className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Verification email sent!</p>
+                  <p className="text-sm text-blue-600 mt-0.5">Please check your inbox and click the verification link.</p>
                 </div>
               </div>
             )}
@@ -295,6 +370,16 @@ const Login: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-red-800">Login failed</p>
                   <p className="text-sm text-red-600">{loginError}</p>
+                  {loginError.toLowerCase().includes('verify your email') && (
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={isResending}
+                      className="mt-2 text-sm font-semibold text-primary-600 hover:text-primary-800 underline disabled:opacity-50"
+                    >
+                      {isResending ? 'Sending...' : 'Resend verification email'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}

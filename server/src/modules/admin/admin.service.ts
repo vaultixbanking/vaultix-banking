@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/database';
 import { generateToken } from '../../utils/jwt';
+import { sendCreditNotification } from '../../utils/email';
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
@@ -143,6 +144,8 @@ export const updateUserBLCService = async (
     throw Object.assign(new Error('User not found.'), { statusCode: 404 });
   }
 
+  const previousBalance = user.totalBalance;
+
   const updated = await prisma.user.update({
     where: { accountNumber },
     data: {
@@ -156,6 +159,8 @@ export const updateUserBLCService = async (
     select: {
       accountNumber: true,
       fullName: true,
+      emailAddress: true,
+      currencyType: true,
       totalBalance: true,
       loan: true,
       expenses: true,
@@ -164,6 +169,21 @@ export const updateUserBLCService = async (
       transactions: true,
     },
   });
+
+  // Send credit notification if balance increased
+  if (data.totalBalance !== undefined && data.totalBalance > previousBalance) {
+    const creditAmount = data.totalBalance - previousBalance;
+    sendCreditNotification(
+      updated.emailAddress,
+      updated.fullName,
+      creditAmount,
+      updated.currencyType,
+      updated.totalBalance,
+      'Account Funding'
+    ).catch((err) => {
+      console.error('[ADMIN] Failed to send credit notification:', err);
+    });
+  }
 
   return updated;
 };

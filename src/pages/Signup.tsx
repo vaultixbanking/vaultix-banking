@@ -235,7 +235,7 @@ const Signup: React.FC = () => {
         if (formData.state) payload.append('state', formData.state);
         if (formData.zipCode) payload.append('zipCode', formData.zipCode);
         if (formData.residentialAddress) payload.append('residentialAddress', formData.residentialAddress);
-        if (formData.phone) payload.append('phone', formData.phone);
+        payload.append('phone', formData.phone);
         if (formData.alternatePhone) payload.append('alternatePhone', formData.alternatePhone);
 
         // Step 2 — Employment
@@ -274,10 +274,10 @@ const Signup: React.FC = () => {
         setSubmitSuccess(true);
         setCreatedAccount(data.data);
 
-        // Redirect to login after 3 seconds
+        // Redirect to login after 5 seconds (user needs to verify email first)
         setTimeout(() => {
-          navigate('/login', { state: { signupSuccess: true, accountNumber: data.data.accountNumber } });
-        }, 3000);
+          navigate('/login', { state: { signupSuccess: true, accountNumber: data.data.accountNumber, needsVerification: true } });
+        }, 5000);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
         setSubmitError(message);
@@ -1256,6 +1256,15 @@ const Signup: React.FC = () => {
             <div className="bg-primary-50 rounded-lg p-4 mb-4">
               <p className="text-sm text-secondary-500 mb-1">Your Account Number</p>
               <p className="text-xl font-bold text-primary-700 tracking-wider">{createdAccount.accountNumber}</p>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <Mail className="w-5 h-5 text-blue-600" />
+                <p className="text-sm font-semibold text-blue-800">Check Your Email</p>
+              </div>
+              <p className="text-sm text-blue-700">
+                We've sent a verification link to your email address. Please verify your email to activate your account.
+              </p>
             </div>
             <p className="text-sm text-secondary-500 mb-4">
               Please save your account number. You&apos;ll be redirected to login shortly.
