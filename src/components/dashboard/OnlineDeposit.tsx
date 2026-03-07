@@ -3,16 +3,21 @@ import { Copy, Upload, Check, AlertCircle, ArrowDownToLine } from 'lucide-react'
 import { api } from '../../lib/api';
 
 const cryptoOptions = [
-  { value: 'bitcoin', label: 'Bitcoin (BTC)', icon: '₿' },
-  { value: 'ethereum', label: 'Ethereum (ETH)', icon: 'Ξ' },
-  { value: 'litecoin', label: 'Litecoin (LTC)', icon: 'Ł' },
-  { value: 'usdt', label: 'Tether (USDT)', icon: '₮' },
+  { value: 'bitcoin', label: 'Bitcoin', symbol: 'BTC', icon: '₿' },
+  { value: 'ethereum', label: 'Ethereum', symbol: 'ETH', icon: 'Ξ' },
+  { value: 'litecoin', label: 'Litecoin', symbol: 'LTC', icon: 'Ł' },
+  { value: 'usdt', label: 'Tether', symbol: 'USDT', icon: '₮' },
 ];
+
+interface DepositInfo {
+  address: string;
+  network: string;
+}
 
 const OnlineDeposit = () => {
   const [amount, setAmount] = useState('');
   const [cryptoType, setCryptoType] = useState('bitcoin');
-  const [walletAddress, setWalletAddress] = useState('');
+  const [depositInfo, setDepositInfo] = useState<DepositInfo>({ address: '', network: '' });
   const [loadingAddress, setLoadingAddress] = useState(false);
   const [copied, setCopied] = useState(false);
   const [receipt, setReceipt] = useState<File | null>(null);
@@ -21,29 +26,36 @@ const OnlineDeposit = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  const fetchAddress = async (type: string) => {
+  const fetchDepositInfo = async (type: string) => {
     setLoadingAddress(true);
+    setDepositInfo({ address: '', network: '' });
     try {
-      const res = await api<{ success: boolean; address: string }>(`/api/admin/deposit/${type}`);
-      setWalletAddress(res.address || 'Address not available');
+      const res = await api<{ success: boolean; address: string; network: string }>(
+        `/api/admin/deposit/${type}`
+      );
+      setDepositInfo({
+        address: res.address || 'Address not available',
+        network: res.network || '',
+      });
     } catch {
-      setWalletAddress('Address not available');
+      setDepositInfo({ address: 'Address not available', network: '' });
     } finally {
       setLoadingAddress(false);
     }
   };
 
   useEffect(() => {
-    fetchAddress(cryptoType);
+    fetchDepositInfo(cryptoType);
   }, [cryptoType]);
 
   const handleCopy = async () => {
+    if (!depositInfo.address || depositInfo.address === 'Address not available') return;
     try {
-      await navigator.clipboard.writeText(walletAddress);
+      await navigator.clipboard.writeText(depositInfo.address);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback
+      // fallback silently
     }
   };
 
@@ -57,24 +69,21 @@ const OnlineDeposit = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || !receipt) {
-      setError('Please fill in all fields and upload a receipt.');
-      return;
-    }
-
-    setSubmitting(true);
     setError('');
 
+    if (!amount || parseFloat(amount) <= 0) return setError('Enter a valid amount');
+    if (!receipt) return setError('Please upload a payment receipt');
+
+    setSubmitting(true);
     try {
-      // NOTE: There's no deposit endpoint in the backend yet.
-      // For now, show success but this would need a real endpoint.
+      // NOTE: Deposit endpoint will be wired up during API implementation phase
       await new Promise(resolve => setTimeout(resolve, 1500));
       setSuccess(true);
       setAmount('');
       setReceipt(null);
       setPreviewUrl('');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Deposit failed');
+      setError(err instanceof Error ? err.message : 'Deposit submission failed');
     } finally {
       setSubmitting(false);
     }
@@ -82,22 +91,31 @@ const OnlineDeposit = () => {
 
   if (success) {
     return (
-      <div className="max-w-lg mx-auto text-center py-16">
+      <div className="w-full text-center py-16">
         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Check className="w-8 h-8 text-green-600" />
         </div>
         <h2 className="text-2xl font-bold text-secondary-900 mb-2">Deposit Submitted!</h2>
-        <p className="text-secondary-500 mb-6">Your deposit is being reviewed. Funds will be credited once confirmed.</p>
-        <button onClick={() => setSuccess(false)} className="px-6 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors">
+        <p className="text-secondary-500 mb-6">
+          Your deposit is being reviewed. Funds will be credited once confirmed on-chain.
+        </p>
+        <button
+          onClick={() => setSuccess(false)}
+          className="px-6 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors"
+        >
           Make Another Deposit
         </button>
       </div>
     );
   }
 
+  const selectedCrypto = cryptoOptions.find(c => c.value === cryptoType);
+
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="w-full">
       <div className="bg-white rounded-2xl border border-secondary-100 shadow-sm overflow-hidden">
+
+        {/* Header */}
         <div className="px-6 py-5 border-b border-secondary-100 flex items-center gap-3">
           <div className="bg-primary-50 w-10 h-10 rounded-xl flex items-center justify-center">
             <ArrowDownToLine className="w-5 h-5 text-primary-600" />
@@ -109,6 +127,7 @@ const OnlineDeposit = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+
           {/* Amount */}
           <div>
             <label className="block text-sm font-medium text-secondary-700 mb-2">Amount (USD)</label>
@@ -125,9 +144,9 @@ const OnlineDeposit = () => {
             </div>
           </div>
 
-          {/* Crypto Type */}
+          {/* Crypto Selector */}
           <div>
-            <label className="block text-sm font-medium text-secondary-700 mb-2">Crypto Type</label>
+            <label className="block text-sm font-medium text-secondary-700 mb-2">Select Cryptocurrency</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {cryptoOptions.map(opt => (
                 <button
@@ -141,49 +160,80 @@ const OnlineDeposit = () => {
                   }`}
                 >
                   <span className="text-lg block mb-1">{opt.icon}</span>
-                  <span className="text-xs font-medium">{opt.label.split(' ')[0]}</span>
+                  <span className="text-xs font-semibold block">{opt.label}</span>
+                  <span className="text-xs text-secondary-400">{opt.symbol}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Wallet Address */}
+          {/* Network Badge */}
+          {!loadingAddress && depositInfo.network && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-secondary-500">Network:</span>
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                {depositInfo.network}
+              </span>
+              {cryptoType === 'bitcoin' && (
+                <span className="text-xs text-secondary-400">(fixed network)</span>
+              )}
+            </div>
+          )}
+
+          {/* Wallet Address — copy icon inside field */}
           <div>
-            <label className="block text-sm font-medium text-secondary-700 mb-2">Wallet Address</label>
-            <div className="flex gap-2">
+            <label className="block text-sm font-medium text-secondary-700 mb-2">
+              {selectedCrypto?.label} Wallet Address
+            </label>
+            <div className="relative">
               <input
                 type="text"
-                value={loadingAddress ? 'Loading...' : walletAddress}
+                value={loadingAddress ? 'Fetching address...' : depositInfo.address}
                 readOnly
-                className="flex-1 px-4 py-3 border border-secondary-200 rounded-xl bg-secondary-50 text-secondary-700 text-sm font-mono"
+                className="w-full px-4 py-3 pr-12 border border-secondary-200 rounded-xl bg-secondary-50 text-secondary-700 text-sm font-mono truncate"
               />
               <button
                 type="button"
                 onClick={handleCopy}
-                className={`px-4 py-3 rounded-xl font-medium text-sm transition-all flex items-center gap-2 ${
-                  copied ? 'bg-green-100 text-green-700' : 'bg-primary-600 text-white hover:bg-primary-700'
-                }`}
+                title="Copy address"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-secondary-400 hover:text-primary-600 hover:bg-primary-50 transition-all"
               >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                {copied ? 'Copied' : 'Copy'}
+                {copied
+                  ? <Check className="w-4 h-4 text-green-500" />
+                  : <Copy className="w-4 h-4" />
+                }
               </button>
             </div>
+            {copied && (
+              <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                <Check className="w-3 h-3" /> Address copied to clipboard
+              </p>
+            )}
+            <p className="text-xs text-secondary-400 mt-1">
+              Only send {selectedCrypto?.symbol} to this address. Sending other assets may result in permanent loss.
+            </p>
           </div>
 
           {/* Receipt Upload */}
           <div>
-            <label className="block text-sm font-medium text-secondary-700 mb-2">Upload Receipt</label>
+            <label className="block text-sm font-medium text-secondary-700 mb-2">
+              Upload Payment Receipt
+            </label>
             <div
               className="border-2 border-dashed border-secondary-200 rounded-xl p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
               onClick={() => document.getElementById('receipt-input')?.click()}
             >
               {previewUrl ? (
-                <img src={previewUrl} alt="Receipt preview" className="max-h-40 mx-auto rounded-lg" />
+                <div>
+                  <img src={previewUrl} alt="Receipt preview" className="max-h-40 mx-auto rounded-lg mb-2" />
+                  <p className="text-xs text-secondary-500">{receipt?.name}</p>
+                  <p className="text-xs text-primary-600 mt-1">Click to change</p>
+                </div>
               ) : (
                 <div>
                   <Upload className="w-8 h-8 text-secondary-400 mx-auto mb-2" />
-                  <p className="text-sm text-secondary-500">Click or drag to upload receipt</p>
-                  <p className="text-xs text-secondary-400 mt-1">PNG, JPG, PDF up to 5MB</p>
+                  <p className="text-sm text-secondary-600 font-medium">Click to upload receipt</p>
+                  <p className="text-xs text-secondary-400 mt-1">PNG, JPG, PDF — max 5MB</p>
                 </div>
               )}
               <input
@@ -196,6 +246,7 @@ const OnlineDeposit = () => {
             </div>
           </div>
 
+          {/* Error */}
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
               <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
@@ -203,6 +254,7 @@ const OnlineDeposit = () => {
             </div>
           )}
 
+          {/* Submit */}
           <button
             type="submit"
             disabled={submitting}
