@@ -11,7 +11,7 @@ interface Transaction {
   id: string;
   transactionId: string;
   amount: number;
-  withdrawalType: 'CRYPTO' | 'BANK';
+  withdrawalType: 'CRYPTO' | 'BANK' | 'DEPOSIT';
   status: 'PENDING' | 'SUCCESSFUL' | 'FAILED';
   details?: Record<string, unknown>;
   createdAt: string;
@@ -25,7 +25,7 @@ interface TransactionStats {
 }
 
 type FilterStatus = 'ALL' | 'SUCCESSFUL' | 'PENDING' | 'FAILED';
-type FilterType = 'ALL' | 'CRYPTO' | 'BANK';
+type FilterType = 'ALL' | 'CRYPTO' | 'BANK' | 'DEPOSIT';
 type SortOrder = 'newest' | 'oldest' | 'highest' | 'lowest';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -98,8 +98,8 @@ const TransactionHistory = () => {
 
   // ─── Stats ────────────────────────────────────────────────────────────────
   const stats: TransactionStats = {
-    total: transactions.reduce((s, t) => t.status === 'SUCCESSFUL' ? s + t.amount : s, 0),
-    totalOut: transactions.filter(t => t.status === 'SUCCESSFUL').length,
+    total: transactions.reduce((s, t) => (t.status === 'SUCCESSFUL' && t.withdrawalType !== 'DEPOSIT') ? s + t.amount : s, 0),
+    totalOut: transactions.filter(t => t.status === 'SUCCESSFUL' && t.withdrawalType !== 'DEPOSIT').length,
     totalPending: transactions.filter(t => t.status === 'PENDING').length,
     totalFailed: transactions.filter(t => t.status === 'FAILED').length,
   };
@@ -261,10 +261,10 @@ const TransactionHistory = () => {
               {/* Type */}
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-secondary-400 font-medium mr-1">Type:</span>
-                {(['ALL', 'CRYPTO', 'BANK'] as FilterType[]).map(t => (
+                {(['ALL', 'CRYPTO', 'BANK', 'DEPOSIT'] as FilterType[]).map(t => (
                   <button key={t} onClick={() => setFilterType(t)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${filterType === t ? 'bg-primary-600 text-white' : 'bg-secondary-50 text-secondary-600 hover:bg-secondary-100'}`}>
-                    {t === 'ALL' ? 'All' : t === 'CRYPTO' ? '₿ Crypto' : '🏦 Bank'}
+                    {t === 'ALL' ? 'All' : t === 'CRYPTO' ? '₿ Crypto' : t === 'BANK' ? '🏦 Bank' : '💳 Deposit'}
                   </button>
                 ))}
               </div>
@@ -355,23 +355,34 @@ const TransactionHistory = () => {
                     >
                       {/* Icon */}
                       <div className="col-span-1">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${tx.status === 'SUCCESSFUL' ? 'bg-red-50' : tx.status === 'FAILED' ? 'bg-secondary-100' : 'bg-amber-50'}`}>
-                          <ArrowUpRight className={`w-4 h-4 ${tx.status === 'SUCCESSFUL' ? 'text-red-500' : tx.status === 'FAILED' ? 'text-secondary-400' : 'text-amber-500'}`} />
-                        </div>
+                        {tx.withdrawalType === 'DEPOSIT' ? (
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-50">
+                            <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
+                          </div>
+                        ) : (
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${tx.status === 'SUCCESSFUL' ? 'bg-red-50' : tx.status === 'FAILED' ? 'bg-secondary-100' : 'bg-amber-50'}`}>
+                            <ArrowUpRight className={`w-4 h-4 ${tx.status === 'SUCCESSFUL' ? 'text-red-500' : tx.status === 'FAILED' ? 'text-secondary-400' : 'text-amber-500'}`} />
+                          </div>
+                        )}
                       </div>
 
                       {/* Transaction Info */}
                       <div className="col-span-3">
                         <p className="text-sm font-semibold text-secondary-900">
-                          {tx.withdrawalType === 'CRYPTO' ? 'Crypto Withdrawal' : 'Bank Withdrawal'}
+                          {tx.withdrawalType === 'DEPOSIT' ? 'Account Credit' : tx.withdrawalType === 'CRYPTO' ? 'Crypto Withdrawal' : 'Bank Withdrawal'}
                         </p>
                         <p className="text-xs text-secondary-400 font-mono mt-0.5">{tx.transactionId}</p>
                       </div>
 
                       {/* Method */}
                       <div className="col-span-2">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${tx.withdrawalType === 'CRYPTO' ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
-                          {tx.withdrawalType === 'CRYPTO' ? '₿' : '🏦'} {tx.withdrawalType}
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${
+                          tx.withdrawalType === 'DEPOSIT' ? 'bg-emerald-50 text-emerald-700'
+                          : tx.withdrawalType === 'CRYPTO' ? 'bg-orange-50 text-orange-700'
+                          : 'bg-blue-50 text-blue-700'
+                        }`}>
+                          {tx.withdrawalType === 'DEPOSIT' ? '💳' : tx.withdrawalType === 'CRYPTO' ? '₿' : '🏦'}{' '}
+                          {tx.withdrawalType === 'DEPOSIT' ? 'Deposit' : tx.withdrawalType}
                         </span>
                       </div>
 
@@ -383,9 +394,15 @@ const TransactionHistory = () => {
 
                       {/* Amount */}
                       <div className="col-span-2 text-right">
-                        <p className={`text-sm font-bold tabular-nums ${tx.status === 'FAILED' ? 'text-secondary-400 line-through' : 'text-red-600'}`}>
-                          -${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </p>
+                        {tx.withdrawalType === 'DEPOSIT' ? (
+                          <p className="text-sm font-bold tabular-nums text-emerald-600">
+                            +${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </p>
+                        ) : (
+                          <p className={`text-sm font-bold tabular-nums ${tx.status === 'FAILED' ? 'text-secondary-400 line-through' : 'text-red-600'}`}>
+                            -${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </p>
+                        )}
                       </div>
 
                       {/* Status */}
@@ -426,17 +443,29 @@ const TransactionHistory = () => {
                       className="lg:hidden flex items-center gap-3 px-4 py-4 border-b border-secondary-50 hover:bg-secondary-50/50 transition-colors cursor-pointer"
                       onClick={() => setExpandedTx(expandedTx === tx.id ? null : tx.id)}
                     >
-                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${tx.status === 'SUCCESSFUL' ? 'bg-red-50' : tx.status === 'FAILED' ? 'bg-secondary-100' : 'bg-amber-50'}`}>
-                        <ArrowUpRight className={`w-5 h-5 ${tx.status === 'SUCCESSFUL' ? 'text-red-500' : tx.status === 'FAILED' ? 'text-secondary-400' : 'text-amber-500'}`} />
-                      </div>
+                      {tx.withdrawalType === 'DEPOSIT' ? (
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-emerald-50">
+                          <ArrowDownLeft className="w-5 h-5 text-emerald-600" />
+                        </div>
+                      ) : (
+                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${tx.status === 'SUCCESSFUL' ? 'bg-red-50' : tx.status === 'FAILED' ? 'bg-secondary-100' : 'bg-amber-50'}`}>
+                          <ArrowUpRight className={`w-5 h-5 ${tx.status === 'SUCCESSFUL' ? 'text-red-500' : tx.status === 'FAILED' ? 'text-secondary-400' : 'text-amber-500'}`} />
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-secondary-900 truncate">
-                            {tx.withdrawalType === 'CRYPTO' ? 'Crypto Withdrawal' : 'Bank Withdrawal'}
+                            {tx.withdrawalType === 'DEPOSIT' ? 'Account Credit' : tx.withdrawalType === 'CRYPTO' ? 'Crypto Withdrawal' : 'Bank Withdrawal'}
                           </p>
-                          <p className={`text-sm font-bold tabular-nums shrink-0 ${tx.status === 'FAILED' ? 'text-secondary-400 line-through' : 'text-red-600'}`}>
-                            -${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </p>
+                          {tx.withdrawalType === 'DEPOSIT' ? (
+                            <p className="text-sm font-bold tabular-nums shrink-0 text-emerald-600">
+                              +${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </p>
+                          ) : (
+                            <p className={`text-sm font-bold tabular-nums shrink-0 ${tx.status === 'FAILED' ? 'text-secondary-400 line-through' : 'text-red-600'}`}>
+                              -${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center justify-between mt-1 gap-2">
                           <p className="text-xs text-secondary-400 font-mono truncate">{tx.transactionId}</p>
@@ -477,7 +506,9 @@ const TransactionHistory = () => {
               </p>
               <div className="flex items-center gap-1.5">
                 <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-xs text-secondary-400">Deposits coming soon</span>
+                <span className="text-xs text-secondary-400">
+                  {transactions.filter(t => t.withdrawalType === 'DEPOSIT').length} credit{transactions.filter(t => t.withdrawalType === 'DEPOSIT').length !== 1 ? 's' : ''}
+                </span>
               </div>
             </div>
           </div>

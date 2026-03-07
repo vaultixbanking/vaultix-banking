@@ -7,6 +7,7 @@ import path from 'path';
 import authRoutes from './modules/auth/auth.routes';
 import userRoutes from './modules/user/user.routes';
 import transactionRoutes from './modules/transactions/transactions.routes';
+import depositsRoutes from './modules/deposits/deposits.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { prisma } from './config/database';
@@ -45,6 +46,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/deposits', depositsRoutes);
 app.use('/api/admin', adminRoutes);
 
 // ─── Error Handling ───────────────────────────────────────────────────────────

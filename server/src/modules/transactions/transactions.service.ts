@@ -70,8 +70,44 @@ export const withdrawService = async (userId: string, body: WithdrawBody) => {
 };
 
 export const getWithdrawalHistoryService = async (userId: string) => {
-  return prisma.withdrawal.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
-  });
+  const [withdrawals, fundingTxns] = await Promise.all([
+    prisma.withdrawal.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.fundingTransaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
+
+  const withdrawalItems = withdrawals.map(w => ({
+    id: w.id,
+    transactionId: w.transactionId,
+    amount: w.amount,
+    withdrawalType: w.withdrawalType,
+    status: w.status,
+    details: w.details as Record<string, unknown> | undefined,
+    createdAt: w.createdAt.toISOString(),
+  }));
+
+  const creditItems = fundingTxns.map(f => ({
+    id: f.id,
+    transactionId: f.transactionId,
+    amount: f.amount,
+    withdrawalType: 'DEPOSIT' as const,
+    status: 'SUCCESSFUL' as const,
+    details: {
+      description: f.description || 'Account funding',
+      currency: f.currency,
+      balanceBefore: f.balanceBefore,
+      balanceAfter: f.balanceAfter,
+      ...(f.adminNote ? { adminNote: f.adminNote } : {}),
+    },
+    createdAt: f.createdAt.toISOString(),
+  }));
+
+  return [...withdrawalItems, ...creditItems].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 };
