@@ -265,6 +265,13 @@ const AdminDepositRequests = () => {
                         {req.receiptPath && (
                           <div className="sm:col-span-2">
                             <p className="text-xs text-slate-500 mb-2">Payment Receipt</p>
+                            {/\.(jpe?g|png)$/i.test(req.receiptPath) && (
+                              <img
+                                src={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/${req.receiptPath}`}
+                                alt="Payment receipt"
+                                className="max-w-xs max-h-64 rounded-xl border border-slate-200 mb-2 object-contain"
+                              />
+                            )}
                             <a
                               href={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/${req.receiptPath}`}
                               target="_blank"

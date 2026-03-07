@@ -146,32 +146,52 @@ const OnlineDeposit = () => {
   // ─── Success screen ────────────────────────────────────────────────────────
   if (success) {
     return (
-      <div className="w-full text-center py-16 px-6">
-        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Check className="w-8 h-8 text-green-600" />
-        </div>
-        <h2 className="text-2xl font-bold text-secondary-900 mb-2">Deposit Submitted!</h2>
-        <p className="text-secondary-500 mb-2">
-          Your deposit request has been received and is under review.
-        </p>
-        <p className="text-secondary-400 text-sm mb-1">
-          Funds will be credited once our team confirms your transaction.
-        </p>
-        {successData && (
-          <div className="mt-4 inline-flex flex-col items-center gap-1 bg-secondary-50 border border-secondary-200 rounded-xl px-6 py-4">
-            <p className="text-xs text-secondary-400">Request ID</p>
-            <p className="text-sm font-mono font-semibold text-secondary-700">{successData.requestId}</p>
-            <p className="text-xs text-secondary-400 mt-2">Amount</p>
-            <p className="text-sm font-bold text-primary-600">${successData.amount.toLocaleString()}</p>
+      <div className="w-full max-w-2xl mx-auto py-10 sm:py-14 px-4">
+        <div className="relative overflow-hidden bg-white border border-secondary-100 rounded-3xl shadow-sm">
+          {/* Decorative glows */}
+          <div className="absolute -top-16 -right-16 w-44 h-44 rounded-full bg-green-100/70 blur-2xl" />
+          <div className="absolute -bottom-20 -left-20 w-52 h-52 rounded-full bg-primary-100/70 blur-2xl" />
+
+          <div className="relative px-6 sm:px-8 py-8 sm:py-10 text-center">
+            {/* Gradient icon */}
+            <div className="w-20 h-20 bg-linear-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-green-500/30">
+              <Check className="w-10 h-10 text-white" />
+            </div>
+
+            <h2 className="text-2xl sm:text-3xl font-bold text-secondary-900 mb-2">Deposit Submitted!</h2>
+            <p className="text-secondary-600 leading-relaxed">
+              Your deposit request of{' '}
+              <span className="font-semibold text-secondary-900">
+                ${successData?.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>{' '}
+              has been received and is under review.
+            </p>
+            <p className="text-xs text-secondary-400 mt-2 mb-6">
+              Funds will be credited once our team confirms your transaction.
+            </p>
+
+            {successData && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7 text-left">
+                <div className="bg-secondary-50 border border-secondary-200 rounded-2xl p-4">
+                  <p className="text-[11px] uppercase tracking-wide text-secondary-400 mb-1">Request ID</p>
+                  <p className="text-sm font-mono font-semibold text-secondary-800 break-all">{successData.requestId}</p>
+                </div>
+                <div className="bg-primary-50 border border-primary-100 rounded-2xl p-4">
+                  <p className="text-[11px] uppercase tracking-wide text-primary-500 mb-1">Amount</p>
+                  <p className="text-lg font-bold text-primary-700">
+                    ${successData.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => { setSuccess(false); setSuccessData(null); }}
+              className="w-full sm:w-auto px-7 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-colors"
+            >
+              Make Another Deposit
+            </button>
           </div>
-        )}
-        <div className="mt-6">
-          <button
-            onClick={() => { setSuccess(false); setSuccessData(null); }}
-            className="px-6 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors"
-          >
-            Make Another Deposit
-          </button>
         </div>
       </div>
     );

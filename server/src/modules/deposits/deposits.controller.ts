@@ -25,8 +25,8 @@ export const submitDeposit = async (
       return;
     }
 
-    // Receipt path from multer (optional but encouraged)
-    const receiptPath = req.file?.path;
+    // Receipt path from multer — store relative path so the frontend can build the URL
+    const receiptPath = req.file ? `uploads/${req.file.filename}` : undefined;
 
     const data = await submitDepositRequestService(req.user!.userId, {
       amount: parseFloat(amount),
