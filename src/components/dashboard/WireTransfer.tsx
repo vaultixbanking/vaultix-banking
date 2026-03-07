@@ -119,7 +119,7 @@ const WireTransfer = () => {
           <div className="absolute -bottom-20 -left-20 w-52 h-52 rounded-full bg-primary-100/70 blur-2xl" />
 
           <div className="relative px-6 sm:px-8 py-8 sm:py-10 text-center">
-            <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-green-500/30">
+            <div className="w-20 h-20 bg-linear-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-green-500/30">
               <Check className="w-10 h-10 text-white" />
             </div>
 

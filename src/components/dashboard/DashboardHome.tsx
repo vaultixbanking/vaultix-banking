@@ -136,7 +136,7 @@ const DashboardHome = () => {
       </div>
 
       {/* ── Balance Card ──────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-primary-700 via-primary-600 to-primary-800 rounded-2xl p-6 sm:p-8 text-white shadow-xl shadow-primary-500/20">
+      <div className="relative overflow-hidden bg-linear-to-r from-primary-700 via-primary-600 to-primary-800 rounded-2xl p-6 sm:p-8 text-white shadow-xl shadow-primary-500/20">
         <div className="absolute inset-0 opacity-10 pointer-events-none">
           <div className="absolute top-0 right-0 w-40 h-40 bg-white rounded-full -translate-y-20 translate-x-20" />
           <div className="absolute bottom-0 left-0 w-60 h-60 bg-white rounded-full translate-y-30 -translate-x-20" />
@@ -242,7 +242,7 @@ const DashboardHome = () => {
                   </div>
                   <div className="h-3 bg-secondary-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-primary-400 to-primary-600 rounded-full transition-all duration-700"
+                      className="h-full bg-linear-to-r from-primary-400 to-primary-600 rounded-full transition-all duration-700"
                       style={{ width: `${(entry.spent / maxSpent) * 100}%` }}
                     />
                   </div>

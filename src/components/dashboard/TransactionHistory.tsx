@@ -408,7 +408,7 @@ const TransactionHistory = () => {
                         <div className="flex flex-wrap gap-4 text-sm">
                           {tx.details && Object.entries(tx.details).map(([key, val]) =>
                             val ? (
-                              <div key={key} className="min-w-[140px]">
+                              <div key={key} className="min-w-35">
                                 <p className="text-xs text-secondary-400 capitalize mb-0.5">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
                                 <p className="font-medium text-secondary-800 font-mono text-xs break-all">{String(val)}</p>
                               </div>

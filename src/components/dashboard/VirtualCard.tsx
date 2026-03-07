@@ -6,7 +6,7 @@ const VirtualCard = () => {
 
       {/* Coming Soon Card Visual */}
       <div className="w-full relative">
-        <div className="relative w-full rounded-2xl p-6 sm:p-8 flex flex-col justify-between overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 min-h-48">
+        <div className="relative w-full rounded-2xl p-6 sm:p-8 flex flex-col justify-between overflow-hidden bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 min-h-48">
 
           {/* Background decorative circles */}
           <div className="absolute inset-0 opacity-10 pointer-events-none">

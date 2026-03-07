@@ -5,7 +5,7 @@ const LoanMortgages = () => {
     <div className="w-full space-y-6">
 
       {/* Hero Banner */}
-      <div className="relative w-full rounded-2xl overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 p-8 sm:p-10">
+      <div className="relative w-full rounded-2xl overflow-hidden bg-linear-to-br from-primary-600 via-primary-700 to-primary-900 p-8 sm:p-10">
         {/* Background decorative circles */}
         <div className="absolute inset-0 opacity-10 pointer-events-none">
           <div className="absolute -top-8 -right-8 w-52 h-52 rounded-full border-2 border-white" />
