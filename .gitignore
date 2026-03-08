@@ -31,3 +31,4 @@ dist-ssr
 # Uploaded files
 server/uploads/*
 !server/uploads/.gitkeep
+server/prisma/seed.ts
