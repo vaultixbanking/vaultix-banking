@@ -3,6 +3,13 @@ import { Resend } from 'resend';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM_EMAIL = 'Vaultix Bank <no-reply@vaultixbank.org>';
+const REPLY_TO = 'support@vaultixbank.org';
+
+// Common headers to improve deliverability
+const emailHeaders = {
+  'X-Entity-Ref-ID': `vaultix-${Date.now()}`,
+  'List-Unsubscribe': '<mailto:unsubscribe@vaultixbank.org>',
+};
 
 // ─── Shared Styles (inline-safe for email clients) ──────────────────────────
 
@@ -387,9 +394,11 @@ export const sendVerificationEmail = async (to: string, username: string, verifi
     const html = buildVerificationEmail(username, verificationLink);
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
+      replyTo: REPLY_TO,
       to,
       subject: 'Verify Your Vaultix Account',
       html,
+      headers: emailHeaders,
     });
     if (error) {
       console.error('[EMAIL] Verification email failed:', JSON.stringify(error));
@@ -407,9 +416,11 @@ export const sendWelcomeEmail = async (to: string, username: string, accountNumb
     const html = buildWelcomeEmail(username, accountNumber);
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
+      replyTo: REPLY_TO,
       to,
-      subject: 'Welcome to Vaultix Bank!',
+      subject: 'Welcome to Vaultix — Your Account is Ready',
       html,
+      headers: emailHeaders,
     });
     if (error) {
       console.error('[EMAIL] Welcome email failed:', JSON.stringify(error));
@@ -433,12 +444,13 @@ export const sendCreditNotification = async (
   try {
     const transactionDate = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
     const html = buildCreditNotificationEmail(username, amount, currency, newBalance, description, transactionDate);
-    const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
+      replyTo: REPLY_TO,
       to,
-      subject: `Credit Alert: +${currency} ${fmtAmt}`,
+      subject: `Vaultix — You've Received a Deposit`,
       html,
+      headers: emailHeaders,
     });
     if (error) {
       console.error('[EMAIL] Credit notification failed:', JSON.stringify(error));
@@ -464,7 +476,6 @@ export const sendDebitNotification = async (
     const transactionDate = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
     let html: string;
     let subject: string;
-    const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
 
     if (transactionType === 'BANK' && details?.transferType === 'WIRE') {
       html = buildWireTransferEmail(
@@ -473,7 +484,7 @@ export const sendDebitNotification = async (
         (details.bankName as string) || 'N/A',
         (details.swiftCode as string) || 'N/A'
       );
-      subject = `Wire Transfer: -${currency} ${fmtAmt}`;
+      subject = 'Vaultix — Wire Transfer Confirmation';
     } else if (transactionType === 'BANK' && details?.transferType === 'DOMESTIC') {
       html = buildDomesticTransferEmail(
         username, amount, currency, newBalance, transactionId, transactionDate,
@@ -481,14 +492,14 @@ export const sendDebitNotification = async (
         (details.bankName as string) || 'N/A',
         (details.accountNumber as string) || 'N/A'
       );
-      subject = `Domestic Transfer: -${currency} ${fmtAmt}`;
+      subject = 'Vaultix — Transfer Confirmation';
     } else if (transactionType === 'BANK') {
       html = buildBankWithdrawalEmail(
         username, amount, currency, newBalance, transactionId, transactionDate,
         (details?.bankName as string) || 'External Bank',
         (details?.accountNumber as string) || 'N/A'
       );
-      subject = `Bank Withdrawal: -${currency} ${fmtAmt}`;
+      subject = 'Vaultix — Withdrawal Confirmation';
     } else if (transactionType === 'CRYPTO') {
       html = buildCryptoWithdrawalEmail(
         username, amount, currency, newBalance, transactionId, transactionDate,
@@ -496,17 +507,19 @@ export const sendDebitNotification = async (
         (details?.walletAddress as string) || 'N/A',
         (details?.network as string) || ''
       );
-      subject = `Crypto Withdrawal: -${currency} ${fmtAmt}`;
+      subject = 'Vaultix — Withdrawal Confirmation';
     } else {
       html = buildDebitNotificationEmail(username, amount, currency, newBalance, transactionType, transactionId, transactionDate);
-      subject = `Debit Alert: -${currency} ${fmtAmt}`;
+      subject = 'Vaultix — Transaction Confirmation';
     }
 
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
+      replyTo: REPLY_TO,
       to,
       subject,
       html,
+      headers: emailHeaders,
     });
     if (error) {
       console.error('[EMAIL] Debit notification failed:', JSON.stringify(error));
@@ -715,12 +728,13 @@ export const sendPendingDepositEmail = async (
   try {
     const transactionDate = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
     const html = buildPendingDepositEmail(username, amount, currency, description, transactionId, transactionDate);
-    const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
+      replyTo: REPLY_TO,
       to,
-      subject: `Pending Deposit: +${currency} ${fmtAmt}`,
+      subject: 'Vaultix — Deposit Being Processed',
       html,
+      headers: emailHeaders,
     });
     if (error) {
       console.error('[EMAIL] Pending deposit email failed:', JSON.stringify(error));
@@ -744,12 +758,13 @@ export const sendDepositSuccessEmail = async (
   try {
     const transactionDate = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
     const html = buildDepositSuccessEmail(username, amount, currency, newBalance, description, transactionId, transactionDate);
-    const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
+      replyTo: REPLY_TO,
       to,
-      subject: `Deposit Confirmed: +${currency} ${fmtAmt}`,
+      subject: 'Vaultix — Deposit Confirmed',
       html,
+      headers: emailHeaders,
     });
     if (error) {
       console.error('[EMAIL] Deposit success email failed:', JSON.stringify(error));
@@ -772,12 +787,13 @@ export const sendDepositFailedEmail = async (
   try {
     const transactionDate = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
     const html = buildDepositFailedEmail(username, amount, currency, description, transactionId, transactionDate);
-    const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
+      replyTo: REPLY_TO,
       to,
-      subject: `Deposit Failed: ${currency} ${fmtAmt}`,
+      subject: 'Vaultix — Deposit Update',
       html,
+      headers: emailHeaders,
     });
     if (error) {
       console.error('[EMAIL] Deposit failed email failed:', JSON.stringify(error));
