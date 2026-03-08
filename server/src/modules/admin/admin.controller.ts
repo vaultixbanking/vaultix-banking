@@ -12,8 +12,10 @@ import {
   getAllTransactionsService,
   getAllDepositRequestsService,
   updateDepositRequestStatusService,
+  updateFundingTransactionStatusService,
 } from './admin.service';
 import { isValidDepositStatus, DepositStatus } from '../../constants/depositStatus';
+import { isValidFundingStatus, FundingStatus } from '../../constants/fundingStatus';
 
 /**
  * Admin login
@@ -106,18 +108,23 @@ export const creditUserAccount = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { amount, description, adminNote } = req.body;
+    const { amount, description, adminNote, status } = req.body;
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
       res.status(400).json({ success: false, message: 'A valid positive amount is required.' });
+      return;
+    }
+    if (status && !isValidFundingStatus(status)) {
+      res.status(400).json({ success: false, message: 'Status must be PENDING, SUCCESSFUL, or FAILED.' });
       return;
     }
     const data = await creditUserAccountService(
       req.params.accountNumber,
       parseFloat(amount),
       description,
-      adminNote
+      adminNote,
+      (status as FundingStatus) || undefined
     );
-    res.status(200).json({ success: true, message: 'Account credited successfully.', data });
+    res.status(200).json({ success: true, message: 'Funding transaction created.', data });
   } catch (err) {
     next(err);
   }
@@ -207,6 +214,42 @@ export const updateDepositRequestStatus = async (
       success: true, 
       message: `Deposit request ${status.toLowerCase()}.`, 
       data 
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Update funding transaction status (PENDING → SUCCESSFUL / FAILED)
+ * PATCH /api/admin/funding-transactions/:transactionId/status
+ */
+export const updateFundingTransactionStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { status, adminNote } = req.body;
+
+    if (!status || !isValidFundingStatus(status)) {
+      res.status(400).json({
+        success: false,
+        message: 'Status must be PENDING, SUCCESSFUL, or FAILED.',
+      });
+      return;
+    }
+
+    const data = await updateFundingTransactionStatusService(
+      req.params.transactionId,
+      status as FundingStatus,
+      adminNote
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Funding transaction updated to ${status}.`,
+      data,
     });
   } catch (err) {
     next(err);

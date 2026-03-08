@@ -12,6 +12,7 @@ import {
   getAllTransactions,
   getAllDepositRequests,
   updateDepositRequestStatus,
+  updateFundingTransactionStatus,
 } from './admin.controller';
 import { authenticate } from '../../middleware/auth';
 
@@ -39,6 +40,9 @@ router.get('/deposit/:cryptoType', getDepositByCrypto);
 // ─── Deposit Requests (admin review) ─────────────────────────────────────────
 router.get('/deposit-requests', authenticate, getAllDepositRequests);
 router.patch('/deposit-requests/:requestId/status', authenticate, updateDepositRequestStatus);
+
+// ─── Funding Transaction Status (admin update) ──────────────────────────────
+router.patch('/funding-transactions/:transactionId/status', authenticate, updateFundingTransactionStatus);
 
 // ─── Transactions (protected) ─────────────────────────────────────────────────
 router.get('/transactions', authenticate, getAllTransactions);

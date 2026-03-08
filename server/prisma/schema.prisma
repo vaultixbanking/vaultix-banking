@@ -135,8 +135,9 @@ model FundingTransaction {
   adminNote     String?
   balanceBefore Float
   balanceAfter  Float
-  status        String   @default("COMPLETED")
+  status        String   @default("PENDING")
   createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@map("funding_transactions")
 }

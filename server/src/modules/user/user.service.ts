@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { VAULTIX_ROUTING_NUMBER } from '../../constants/bank';
 
 // ─── Dashboard Service ────────────────────────────────────────────────────────
 export const getUserDashboardService = async (userId: string) => {
@@ -105,6 +106,7 @@ export const getUserDashboardService = async (userId: string) => {
 
   return {
     ...user,
+    routingNumber: VAULTIX_ROUTING_NUMBER,
     expenses,
     paymentToday,
     paymentTodayCount,

@@ -517,3 +517,274 @@ export const sendDebitNotification = async (
     console.error('[EMAIL] Debit notification error:', err);
   }
 };
+
+// ─── Funding Status Email Templates ─────────────────────────────────────────
+
+export const buildPendingDepositEmail = (
+  username: string,
+  amount: number,
+  currency: string,
+  description: string,
+  transactionId: string,
+  transactionDate: string
+) => {
+  const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const content = `
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="display:inline-block;width:56px;height:56px;background:#fefce8;border-radius:50%;line-height:56px;">
+        <span style="font-size:24px;">⏳</span>
+      </div>
+    </div>
+    <h1 style="text-align:center;">Incoming Deposit</h1>
+    <p class="subtitle" style="text-align:center;">
+      Hi ${username}, you have a pending deposit being processed on your Vaultix account.
+    </p>
+
+    <div class="info-box" style="background:#fefce8;border:1px solid #fde68a;">
+      <p class="info-label" style="color:#92400e;">Pending Amount</p>
+      <p style="color:#d97706;font-size:28px;font-weight:700;margin:0;">+${currency} ${fmtAmt}</p>
+    </div>
+
+    <table class="detail-table">
+      <tr>
+        <td class="detail-label">Transaction ID</td>
+        <td class="detail-value mono" style="font-size:12px;">${transactionId}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Description</td>
+        <td class="detail-value">${description}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Date</td>
+        <td class="detail-value">${transactionDate}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Status</td>
+        <td class="detail-value" style="color:#d97706;">⏳ Pending Review</td>
+      </tr>
+    </table>
+
+    <div class="alert-box" style="background:#fefce8;border:1px solid #fde68a;">
+      <p style="color:#92400e;margin:0;">🔔 This deposit is being reviewed. Your balance will be updated once the deposit is confirmed.</p>
+    </div>
+
+    <div style="text-align:center;margin:24px 0;">
+      <a href="https://vaultixbank.org/login" class="btn btn-primary">View Account</a>
+    </div>
+
+    <hr class="divider" />
+    <p style="color:#94a3b8;font-size:12px;text-align:center;">
+      Questions? <a href="https://vaultixbank.org/support" style="color:#0f172a;font-weight:600;">Contact support</a>
+    </p>
+  `;
+  return wrapEmail(content, `Pending deposit of ${currency} ${fmtAmt} on your Vaultix account`);
+};
+
+export const buildDepositSuccessEmail = (
+  username: string,
+  amount: number,
+  currency: string,
+  newBalance: number,
+  description: string,
+  transactionId: string,
+  transactionDate: string
+) => {
+  const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const fmtBal = newBalance.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const content = `
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="display:inline-block;width:56px;height:56px;background:#f0fdf4;border-radius:50%;line-height:56px;">
+        <span style="font-size:24px;">✅</span>
+      </div>
+    </div>
+    <h1 style="text-align:center;">Deposit Confirmed</h1>
+    <p class="subtitle" style="text-align:center;">
+      Hi ${username}, your pending deposit has been confirmed and credited to your account.
+    </p>
+
+    <div class="info-box" style="background:#f0fdf4;border:1px solid #bbf7d0;">
+      <p class="info-label" style="color:#166534;">Amount Credited</p>
+      <p class="amount-credit">+${currency} ${fmtAmt}</p>
+    </div>
+
+    <table class="detail-table">
+      <tr>
+        <td class="detail-label">Transaction ID</td>
+        <td class="detail-value mono" style="font-size:12px;">${transactionId}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Description</td>
+        <td class="detail-value">${description}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Date</td>
+        <td class="detail-value">${transactionDate}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">New Balance</td>
+        <td class="detail-value" style="color:#16a34a;">${currency} ${fmtBal}</td>
+      </tr>
+    </table>
+
+    <div class="alert-box" style="background:#f0fdf4;border:1px solid #bbf7d0;">
+      <p style="color:#166534;margin:0;">✅ This deposit is now available in your account.</p>
+    </div>
+
+    <div style="text-align:center;margin:24px 0;">
+      <a href="https://vaultixbank.org/login" class="btn btn-green">View Account</a>
+    </div>
+
+    <hr class="divider" />
+    <p style="color:#94a3b8;font-size:12px;text-align:center;">
+      Didn't expect this? <a href="https://vaultixbank.org/support" style="color:#0f172a;font-weight:600;">Contact support</a>
+    </p>
+  `;
+  return wrapEmail(content, `Deposit of ${currency} ${fmtAmt} confirmed — your balance is updated`);
+};
+
+export const buildDepositFailedEmail = (
+  username: string,
+  amount: number,
+  currency: string,
+  description: string,
+  transactionId: string,
+  transactionDate: string
+) => {
+  const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const content = `
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="display:inline-block;width:56px;height:56px;background:#fef2f2;border-radius:50%;line-height:56px;">
+        <span style="font-size:24px;">❌</span>
+      </div>
+    </div>
+    <h1 style="text-align:center;">Deposit Failed</h1>
+    <p class="subtitle" style="text-align:center;">
+      Hi ${username}, unfortunately your pending deposit could not be processed.
+    </p>
+
+    <div class="info-box" style="background:#fef2f2;border:1px solid #fecaca;">
+      <p class="info-label" style="color:#991b1b;">Amount</p>
+      <p style="color:#dc2626;font-size:28px;font-weight:700;margin:0;">${currency} ${fmtAmt}</p>
+    </div>
+
+    <table class="detail-table">
+      <tr>
+        <td class="detail-label">Transaction ID</td>
+        <td class="detail-value mono" style="font-size:12px;">${transactionId}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Description</td>
+        <td class="detail-value">${description}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Date</td>
+        <td class="detail-value">${transactionDate}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Status</td>
+        <td class="detail-value" style="color:#dc2626;">❌ Failed</td>
+      </tr>
+    </table>
+
+    <div class="alert-box" style="background:#fef2f2;border:1px solid #fecaca;">
+      <p style="color:#991b1b;margin:0;">This deposit was not applied to your account. No funds have been deducted. If you believe this is an error, please contact our support team.</p>
+    </div>
+
+    <div style="text-align:center;margin:24px 0;">
+      <a href="https://vaultixbank.org/support" class="btn btn-red">Contact Support</a>
+    </div>
+
+    <hr class="divider" />
+    <p style="color:#94a3b8;font-size:12px;text-align:center;">
+      Need help? <a href="https://vaultixbank.org/support" style="color:#0f172a;font-weight:600;">Reach out to our team</a>
+    </p>
+  `;
+  return wrapEmail(content, `Deposit of ${currency} ${fmtAmt} could not be processed`);
+};
+
+// ─── Send Funding Status Emails ─────────────────────────────────────────────
+
+export const sendPendingDepositEmail = async (
+  to: string,
+  username: string,
+  amount: number,
+  currency: string,
+  description: string,
+  transactionId: string
+) => {
+  try {
+    const transactionDate = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+    const html = buildPendingDepositEmail(username, amount, currency, description, transactionId, transactionDate);
+    const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `Pending Deposit: +${currency} ${fmtAmt}`,
+      html,
+    });
+    if (error) {
+      console.error('[EMAIL] Pending deposit email failed:', JSON.stringify(error));
+    } else {
+      console.log(`[EMAIL] Pending deposit email sent to ${to}`);
+    }
+  } catch (err) {
+    console.error('[EMAIL] Pending deposit email error:', err);
+  }
+};
+
+export const sendDepositSuccessEmail = async (
+  to: string,
+  username: string,
+  amount: number,
+  currency: string,
+  newBalance: number,
+  description: string,
+  transactionId: string
+) => {
+  try {
+    const transactionDate = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+    const html = buildDepositSuccessEmail(username, amount, currency, newBalance, description, transactionId, transactionDate);
+    const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `Deposit Confirmed: +${currency} ${fmtAmt}`,
+      html,
+    });
+    if (error) {
+      console.error('[EMAIL] Deposit success email failed:', JSON.stringify(error));
+    } else {
+      console.log(`[EMAIL] Deposit success email sent to ${to}`);
+    }
+  } catch (err) {
+    console.error('[EMAIL] Deposit success email error:', err);
+  }
+};
+
+export const sendDepositFailedEmail = async (
+  to: string,
+  username: string,
+  amount: number,
+  currency: string,
+  description: string,
+  transactionId: string
+) => {
+  try {
+    const transactionDate = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+    const html = buildDepositFailedEmail(username, amount, currency, description, transactionId, transactionDate);
+    const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `Deposit Failed: ${currency} ${fmtAmt}`,
+      html,
+    });
+    if (error) {
+      console.error('[EMAIL] Deposit failed email failed:', JSON.stringify(error));
+    } else {
+      console.log(`[EMAIL] Deposit failed email sent to ${to}`);
+    }
+  } catch (err) {
+    console.error('[EMAIL] Deposit failed email error:', err);
+  }
+};

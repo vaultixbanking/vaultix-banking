@@ -19,6 +19,7 @@ interface DashboardData {
   accountType: string;
   currencyType: string;
   totalBalance: number;
+  routingNumber: string;
   loan: number;
   newLoans: number;
   expenses: number;
@@ -165,6 +166,10 @@ const DashboardHome = () => {
             <div>
               <p className="text-primary-200 text-xs">Account</p>
               <p className="font-semibold tracking-wider">{data?.accountNumber}</p>
+            </div>
+            <div>
+              <p className="text-primary-200 text-xs">Routing Number</p>
+              <p className="font-semibold tracking-wider">{data?.routingNumber}</p>
             </div>
             <div>
               <p className="text-primary-200 text-xs">Type</p>
