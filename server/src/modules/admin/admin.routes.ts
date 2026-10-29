@@ -13,6 +13,9 @@ import {
   getAllDepositRequests,
   updateDepositRequestStatus,
   updateFundingTransactionStatus,
+  createWireTransfer,
+  getAllWireTransfers,
+  updateWireTransferStatus,
 } from './admin.controller';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 
@@ -43,6 +46,11 @@ router.patch('/deposit-requests/:requestId/status', authenticate, requireAdmin, 
 
 // ─── Funding Transaction Status (admin update) ──────────────────────────────
 router.patch('/funding-transactions/:transactionId/status', authenticate, requireAdmin, updateFundingTransactionStatus);
+
+// ─── Wire Transfers (admin-recorded) ─────────────────────────────────────────
+router.get('/wire-transfers', authenticate, requireAdmin, getAllWireTransfers);
+router.post('/wire-transfers', authenticate, requireAdmin, createWireTransfer);
+router.patch('/wire-transfers/:transactionId/status', authenticate, requireAdmin, updateWireTransferStatus);
 
 // ─── Transactions (protected) ─────────────────────────────────────────────────
 router.get('/transactions', authenticate, requireAdmin, getAllTransactions);

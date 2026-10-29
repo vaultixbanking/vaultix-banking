@@ -64,6 +64,7 @@ model User {
   withdrawals         Withdrawal[]
   fundingTransactions FundingTransaction[]
   depositRequests     DepositRequest[]
+  incomingWires       WireTransfer[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -140,6 +141,49 @@ model FundingTransaction {
   updatedAt     DateTime @updatedAt
 
   @@map("funding_transactions")
+}
+
+// ─── Wire Transfer (admin-recorded wires; Vaultix pool → any recipient) ─────
+
+model WireTransfer {
+  id                     String   @id @default(cuid())
+  transactionId          String   @unique            // e.g. WTR-1730212345678-4821
+  amount                 Float
+  currency               String   @default("USD")
+  reason                 String
+  status                 String   @default("PENDING") // PENDING | SUCCESSFUL | FAILED
+
+  senderName             String
+  senderAddress          String?
+  senderBankName         String?
+  senderAccountNumber    String?
+  senderEmail            String?
+
+  recipientType          String                       // VAULTIX | EXTERNAL
+  recipientName          String
+  recipientAccountNumber String                       // account number / IBAN
+  recipientBankName      String
+  recipientSwiftCode     String?
+  recipientRoutingNumber String?
+  recipientAddress       String?
+  recipientCity          String?
+  recipientCountry       String?
+  recipientEmail         String?
+  recipientUserId        String?                      // set when recipient is a Vaultix customer
+  recipientUser          User?    @relation(fields: [recipientUserId], references: [id])
+
+  balanceBefore          Float?                       // only set when a Vaultix balance is credited
+  balanceAfter           Float?
+  notifyByEmail          Boolean  @default(true)
+  adminNote              String?
+  createdByAdminId       String?
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([recipientUserId])
+  @@index([status])
+  @@map("wire_transfers")
 }
 
 // ─── Admin ──────────────────────────────────────────────────────────────────

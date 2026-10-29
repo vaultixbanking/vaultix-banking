@@ -1,15 +1,21 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/database';
 import { generateToken } from '../../utils/jwt';
+import { Prisma, WireTransfer } from '@prisma/client';
 import {
   sendCreditNotification,
   sendPendingDepositEmail,
   sendDepositSuccessEmail,
   sendDepositFailedEmail,
+  sendWireTransferNotice,
+  WireNoticeStatus,
 } from '../../utils/email';
+import { generateTransactionId } from '../../utils/helpers';
 import { DepositMethodResponse } from '../../types/deposit.types';
+import { CreateWireTransferBody } from '../../types';
 import { DepositStatus } from '../../constants/depositStatus';
 import { FUNDING_STATUS, FundingStatus, isValidStatusTransition } from '../../constants/fundingStatus';
+import { VAULTIX_BANK_NAME, VAULTIX_ROUTING_NUMBER } from '../../constants/bank';
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
@@ -435,4 +441,204 @@ export const updateDepositRequestStatusService = async (
     where: { requestId },
     data: { status, adminNote },
   });
+};
+
+// ─── Wire Transfers (admin-recorded) ────────────────────────────────────────
+// Vaultix acts as the money pool: the sender is never debited. When the recipient
+// is a Vaultix customer, their balance is credited once the wire is SUCCESSFUL.
+
+const notifyWireParties = (wire: WireTransfer, newBalance: number | null) => {
+  if (!wire.notifyByEmail) return;
+
+  const notice = {
+    status: wire.status as WireNoticeStatus,
+    transactionId: wire.transactionId,
+    amount: wire.amount,
+    currency: wire.currency,
+    reason: wire.reason,
+    date: wire.updatedAt,
+    senderName: wire.senderName,
+    senderBankName: wire.senderBankName,
+    senderAccountNumber: wire.senderAccountNumber,
+    recipientName: wire.recipientName,
+    recipientBankName: wire.recipientBankName,
+    recipientAccountNumber: wire.recipientAccountNumber,
+    recipientSwiftCode: wire.recipientSwiftCode,
+    recipientRoutingNumber: wire.recipientRoutingNumber,
+    isVaultixRecipient: wire.recipientType === 'VAULTIX',
+    newBalance,
+  };
+
+  if (wire.senderEmail) {
+    sendWireTransferNotice(wire.senderEmail, { ...notice, audience: 'SENDER' })
+      .catch((err) => console.error('[ADMIN] Failed to send wire notice to sender:', err));
+  }
+  if (wire.recipientEmail) {
+    sendWireTransferNotice(wire.recipientEmail, { ...notice, audience: 'RECIPIENT' })
+      .catch((err) => console.error('[ADMIN] Failed to send wire notice to recipient:', err));
+  }
+};
+
+/**
+ * Create a wire transfer. For a Vaultix recipient, the recipient details come from
+ * the database (never the client) and the balance is credited if status is SUCCESSFUL.
+ */
+export const createWireTransferService = async (input: CreateWireTransferBody, adminId?: string) => {
+  let recipient: Pick<
+    Prisma.WireTransferUncheckedCreateInput,
+    | 'recipientName' | 'recipientAccountNumber' | 'recipientBankName' | 'recipientSwiftCode'
+    | 'recipientRoutingNumber' | 'recipientAddress' | 'recipientCity' | 'recipientCountry'
+    | 'recipientEmail' | 'recipientUserId' | 'currency'
+  >;
+
+  if (input.recipientType === 'VAULTIX') {
+    const user = await prisma.user.findUnique({ where: { accountNumber: input.recipientAccountNumber } });
+
+    if (!user) {
+      throw Object.assign(new Error('No Vaultix account found with that account number.'), { statusCode: 404 });
+    }
+
+    recipient = {
+      recipientName: user.fullName,
+      recipientAccountNumber: user.accountNumber,
+      recipientBankName: VAULTIX_BANK_NAME,
+      recipientSwiftCode: null,
+      recipientRoutingNumber: VAULTIX_ROUTING_NUMBER,
+      recipientAddress: user.residentialAddress,
+      recipientCity: user.city,
+      recipientCountry: user.country,
+      recipientEmail: user.emailAddress,
+      recipientUserId: user.id,
+      currency: user.currencyType,
+    };
+  } else {
+    recipient = {
+      recipientName: input.recipientName as string,
+      recipientAccountNumber: input.recipientAccountNumber,
+      recipientBankName: input.recipientBankName as string,
+      recipientSwiftCode: input.recipientSwiftCode,
+      recipientRoutingNumber: input.recipientRoutingNumber,
+      recipientAddress: input.recipientAddress,
+      recipientCity: input.recipientCity,
+      recipientCountry: input.recipientCountry,
+      recipientEmail: input.recipientEmail,
+      recipientUserId: null,
+      currency: input.currency,
+    };
+  }
+
+  const data: Prisma.WireTransferUncheckedCreateInput = {
+    transactionId: generateTransactionId('WTR'),
+    amount: input.amount,
+    reason: input.reason,
+    status: input.status,
+    senderName: input.senderName,
+    senderAddress: input.senderAddress,
+    senderBankName: input.senderBankName,
+    senderAccountNumber: input.senderAccountNumber,
+    senderEmail: input.senderEmail,
+    recipientType: input.recipientType,
+    ...recipient,
+    notifyByEmail: input.notifyByEmail,
+    adminNote: input.adminNote,
+    createdByAdminId: adminId,
+  };
+
+  const recipientUserId = recipient.recipientUserId;
+  const shouldCredit = input.status === FUNDING_STATUS.SUCCESSFUL && !!recipientUserId;
+
+  const { wire, newBalance } = await prisma.$transaction(async (tx) => {
+    if (!shouldCredit) {
+      return { wire: await tx.wireTransfer.create({ data }), newBalance: null };
+    }
+
+    const user = await tx.user.update({
+      where: { id: recipientUserId as string },
+      data: { totalBalance: { increment: input.amount } },
+      select: { totalBalance: true },
+    });
+    const created = await tx.wireTransfer.create({
+      data: { ...data, balanceBefore: user.totalBalance - input.amount, balanceAfter: user.totalBalance },
+    });
+    return { wire: created, newBalance: user.totalBalance };
+  });
+
+  notifyWireParties(wire, newBalance);
+
+  return wire;
+};
+
+/**
+ * List wire transfers (newest first), optionally filtered by status and a search term
+ */
+export const getAllWireTransfersService = async (status?: string, search?: string) => {
+  const where: Prisma.WireTransferWhereInput = {};
+
+  if (status) where.status = status;
+  if (search) {
+    const contains = { contains: search, mode: 'insensitive' as const };
+    where.OR = [
+      { transactionId: contains },
+      { senderName: contains },
+      { recipientName: contains },
+      { recipientAccountNumber: contains },
+      { senderEmail: contains },
+      { recipientEmail: contains },
+    ];
+  }
+
+  return prisma.wireTransfer.findMany({ where, orderBy: { createdAt: 'desc' }, take: 200 });
+};
+
+/**
+ * Update wire transfer status (PENDING → SUCCESSFUL or FAILED)
+ */
+export const updateWireTransferStatusService = async (
+  transactionId: string,
+  newStatus: FundingStatus,
+  adminNote?: string
+) => {
+  const wire = await prisma.wireTransfer.findUnique({ where: { transactionId } });
+
+  if (!wire) {
+    throw Object.assign(new Error('Wire transfer not found.'), { statusCode: 404 });
+  }
+
+  if (!isValidStatusTransition(wire.status, newStatus)) {
+    throw Object.assign(
+      new Error(`Cannot transition from ${wire.status} to ${newStatus}.`),
+      { statusCode: 400 }
+    );
+  }
+
+  const { updated, newBalance } = await prisma.$transaction(async (tx) => {
+    // Conditional on PENDING so two concurrent approvals can never credit twice
+    const { count } = await tx.wireTransfer.updateMany({
+      where: { transactionId, status: FUNDING_STATUS.PENDING },
+      data: { status: newStatus, ...(adminNote !== undefined && { adminNote }) },
+    });
+
+    if (count === 0) {
+      throw Object.assign(new Error('This wire transfer has already been processed.'), { statusCode: 409 });
+    }
+
+    if (newStatus === FUNDING_STATUS.SUCCESSFUL && wire.recipientUserId) {
+      const user = await tx.user.update({
+        where: { id: wire.recipientUserId },
+        data: { totalBalance: { increment: wire.amount } },
+        select: { totalBalance: true },
+      });
+      const credited = await tx.wireTransfer.update({
+        where: { transactionId },
+        data: { balanceBefore: user.totalBalance - wire.amount, balanceAfter: user.totalBalance },
+      });
+      return { updated: credited, newBalance: user.totalBalance };
+    }
+
+    return { updated: await tx.wireTransfer.findUniqueOrThrow({ where: { transactionId } }), newBalance: null };
+  });
+
+  notifyWireParties(updated, newBalance);
+
+  return updated;
 };

@@ -57,3 +57,32 @@ export interface WithdrawBody {
   withdrawalType: string;
   details?: Record<string, unknown>;
 }
+
+// ─── Admin Wire Transfer DTOs ─────────────────────────────────────────────────
+export type WireRecipientType = 'VAULTIX' | 'EXTERNAL';
+
+export interface CreateWireTransferBody {
+  amount: number;
+  currency: string;
+  reason: string;
+  status: 'PENDING' | 'SUCCESSFUL';
+  notifyByEmail: boolean;
+  adminNote?: string;
+
+  senderName: string;
+  senderAddress?: string;
+  senderBankName?: string;
+  senderAccountNumber?: string;
+  senderEmail?: string;
+
+  recipientType: WireRecipientType;
+  recipientAccountNumber: string;
+  recipientName?: string;
+  recipientBankName?: string;
+  recipientSwiftCode?: string;
+  recipientRoutingNumber?: string;
+  recipientAddress?: string;
+  recipientCity?: string;
+  recipientCountry?: string;
+  recipientEmail?: string;
+}

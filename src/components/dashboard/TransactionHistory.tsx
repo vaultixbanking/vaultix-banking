@@ -35,6 +35,12 @@ const formatDate = (d: string) =>
 const formatTime = (d: string) =>
   new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
+const txTitle = (tx: Transaction) =>
+  tx.details?.transferType === 'INCOMING_WIRE' ? 'Incoming Wire Transfer'
+  : tx.withdrawalType === 'DEPOSIT' ? 'Account Credit'
+  : tx.withdrawalType === 'CRYPTO' ? 'Crypto Withdrawal'
+  : 'Bank Withdrawal';
+
 const getDateLabel = (dateStr: string): string => {
   const date = new Date(dateStr);
   const today = new Date();
@@ -369,7 +375,7 @@ const TransactionHistory = () => {
                       {/* Transaction Info */}
                       <div className="col-span-3">
                         <p className="text-sm font-semibold text-secondary-900">
-                          {tx.withdrawalType === 'DEPOSIT' ? 'Account Credit' : tx.withdrawalType === 'CRYPTO' ? 'Crypto Withdrawal' : 'Bank Withdrawal'}
+                          {txTitle(tx)}
                         </p>
                         <p className="text-xs text-secondary-400 font-mono mt-0.5">{tx.transactionId}</p>
                       </div>
@@ -395,7 +401,7 @@ const TransactionHistory = () => {
                       {/* Amount */}
                       <div className="col-span-2 text-right">
                         {tx.withdrawalType === 'DEPOSIT' ? (
-                          <p className="text-sm font-bold tabular-nums text-emerald-600">
+                          <p className={`text-sm font-bold tabular-nums ${tx.status === 'FAILED' ? 'text-secondary-400 line-through' : 'text-emerald-600'}`}>
                             +${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </p>
                         ) : (
@@ -455,10 +461,10 @@ const TransactionHistory = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-secondary-900 truncate">
-                            {tx.withdrawalType === 'DEPOSIT' ? 'Account Credit' : tx.withdrawalType === 'CRYPTO' ? 'Crypto Withdrawal' : 'Bank Withdrawal'}
+                            {txTitle(tx)}
                           </p>
                           {tx.withdrawalType === 'DEPOSIT' ? (
-                            <p className="text-sm font-bold tabular-nums shrink-0 text-emerald-600">
+                            <p className={`text-sm font-bold tabular-nums shrink-0 ${tx.status === 'FAILED' ? 'text-secondary-400 line-through' : 'text-emerald-600'}`}>
                               +${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </p>
                           ) : (

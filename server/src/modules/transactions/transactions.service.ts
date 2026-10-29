@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { generateTransactionId } from '../../utils/helpers';
 import { sendDebitNotification } from '../../utils/email';
@@ -71,7 +72,7 @@ export const withdrawService = async (userId: string, body: WithdrawBody) => {
 };
 
 export const getWithdrawalHistoryService = async (userId: string) => {
-  const [withdrawals, fundingTxns] = await Promise.all([
+  const [withdrawals, fundingTxns, incomingWires] = await Promise.all([
     prisma.withdrawal.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
@@ -80,6 +81,19 @@ export const getWithdrawalHistoryService = async (userId: string) => {
       where: { userId },
       orderBy: { createdAt: 'desc' },
     }),
+    prisma.wireTransfer
+      .findMany({
+        where: { recipientUserId: userId },
+        orderBy: { createdAt: 'desc' },
+      })
+      // If the code goes live before the wire_transfers migration, keep history working
+      .catch((err: unknown) => {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
+          console.warn('[TRANSACTIONS] wire_transfers table missing — run prisma migrate deploy');
+          return [];
+        }
+        throw err;
+      }),
   ]);
 
   const withdrawalItems = withdrawals.map((w: typeof withdrawals[number]) => ({
@@ -108,7 +122,23 @@ export const getWithdrawalHistoryService = async (userId: string) => {
     createdAt: f.createdAt.toISOString(),
   }));
 
-  return [...withdrawalItems, ...creditItems].sort(
+  const wireItems = incomingWires.map((w: typeof incomingWires[number]) => ({
+    id: w.id,
+    transactionId: w.transactionId,
+    amount: w.amount,
+    withdrawalType: 'DEPOSIT' as const,
+    status: w.status,
+    details: {
+      transferType: 'INCOMING_WIRE',
+      sender: w.senderName,
+      senderBank: w.senderBankName,
+      purpose: w.reason,
+      currency: w.currency,
+    },
+    createdAt: w.createdAt.toISOString(),
+  }));
+
+  return [...withdrawalItems, ...creditItems, ...wireItems].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 };

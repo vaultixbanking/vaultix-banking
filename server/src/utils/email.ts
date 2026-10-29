@@ -52,8 +52,8 @@ const baseStyles = `
   .mono { font-family:'SF Mono',Monaco,'Cascadia Code',Consolas,monospace; }
 `;
 
-const headerHtml = `
-  <div class="header">
+const headerHtml = (background?: string) => `
+  <div class="header"${background ? ` style="background:${background};"` : ''}>
     <p class="header-brand">VAULTIX</p>
   </div>
 `;
@@ -69,7 +69,7 @@ const footerHtml = `
   </div>
 `;
 
-const wrapEmail = (content: string, previewText: string) => `
+const wrapEmail = (content: string, previewText: string, headerBackground?: string) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,7 +82,7 @@ const wrapEmail = (content: string, previewText: string) => `
   <div style="display:none;max-height:0;overflow:hidden;">${previewText}</div>
   <div class="wrapper">
     <div class="card">
-      ${headerHtml}
+      ${headerHtml(headerBackground)}
       <div class="body-content">
         ${content}
       </div>
@@ -922,5 +922,247 @@ export const sendDepositFailedEmail = async (
     }
   } catch (err) {
     console.error('[EMAIL] Deposit failed email error:', err);
+  }
+};
+
+// ─── Wire Transfer Notice (admin-recorded wires) ────────────────────────────
+
+export type WireNoticeAudience = 'SENDER' | 'RECIPIENT';
+export type WireNoticeStatus = 'PENDING' | 'SUCCESSFUL' | 'FAILED';
+
+export interface WireTransferNotice {
+  audience: WireNoticeAudience;
+  status: WireNoticeStatus;
+  transactionId: string;
+  amount: number;
+  currency: string;
+  reason: string;
+  date: Date;
+  senderName: string;
+  senderBankName?: string | null;
+  senderAccountNumber?: string | null;
+  recipientName: string;
+  recipientBankName: string;
+  recipientAccountNumber: string;
+  recipientSwiftCode?: string | null;
+  recipientRoutingNumber?: string | null;
+  isVaultixRecipient: boolean;
+  newBalance?: number | null;
+}
+
+// Wire fields are typed in by an admin, so they must be escaped before going into HTML
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const maskAccount = (accountNumber: string) =>
+  accountNumber.length > 4 ? `••••${accountNumber.slice(-4)}` : accountNumber;
+
+const formatMoney = (amount: number) =>
+  amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Product blue + white only, matching the website (primary-600 / primary-50)
+const WIRE_BLUE = {
+  primary: '#2563eb',
+  dark: '#1e40af',
+  tint: '#eff6ff',
+  border: '#bfdbfe',
+  muted: '#dbeafe',
+};
+
+const WIRE_STATUS_LABEL: Record<WireNoticeStatus, string> = {
+  PENDING: 'Processing',
+  SUCCESSFUL: 'Completed',
+  FAILED: 'Not completed',
+};
+
+const wireCopy = (n: WireTransferNotice) => {
+  const sender = escapeHtml(n.senderName);
+  const recipient = escapeHtml(n.recipientName);
+
+  if (n.audience === 'SENDER') {
+    return {
+      PENDING: {
+        title: 'Wire Transfer Initiated',
+        intro: `Hi ${sender}, your wire transfer to <strong>${recipient}</strong> has been initiated and is now being processed.`,
+        note: 'We will email you again as soon as the transfer is completed.',
+      },
+      SUCCESSFUL: {
+        title: 'Wire Transfer Completed',
+        intro: `Hi ${sender}, your wire transfer to <strong>${recipient}</strong> has been completed successfully.`,
+        note: 'Please keep the reference number above for your records.',
+      },
+      FAILED: {
+        title: 'Wire Transfer Unsuccessful',
+        intro: `Hi ${sender}, your wire transfer to <strong>${recipient}</strong> could not be completed.`,
+        note: 'If you have any questions, contact our support team and quote the reference number above.',
+      },
+    }[n.status];
+  }
+
+  return {
+    PENDING: {
+      title: 'Incoming Wire Transfer',
+      intro: `Hi ${recipient}, a wire transfer from <strong>${sender}</strong> to your account is on its way.`,
+      note: n.isVaultixRecipient
+        ? 'Your Vaultix balance will be updated as soon as the transfer is completed.'
+        : 'We will email you again as soon as the transfer is completed.',
+    },
+    SUCCESSFUL: {
+      title: 'Wire Transfer Received',
+      intro: n.isVaultixRecipient
+        ? `Hi ${recipient}, a wire transfer from <strong>${sender}</strong> has been credited to your Vaultix account.`
+        : `Hi ${recipient}, the wire transfer from <strong>${sender}</strong> to your account has been completed.`,
+      note: n.isVaultixRecipient
+        ? 'The funds are available in your account now.'
+        : 'Funds will reflect in your account according to your bank’s processing times.',
+    },
+    FAILED: {
+      title: 'Wire Transfer Unsuccessful',
+      intro: `Hi ${recipient}, the wire transfer from <strong>${sender}</strong> to your account could not be completed.`,
+      note: 'No funds were credited. If you have any questions, contact our support team and quote the reference number above.',
+    },
+  }[n.status];
+};
+
+const wirePartyRow = (role: string, name: string, bank?: string | null, account?: string | null) => {
+  const meta = [bank && escapeHtml(bank), account && escapeHtml(maskAccount(account))].filter(Boolean).join(' &middot; ');
+  return `
+    <tr>
+      <td style="width:56px;padding:14px 0 14px 16px;vertical-align:top;">
+        <span style="font-size:11px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:${WIRE_BLUE.primary};">${role}</span>
+      </td>
+      <td style="padding:12px 16px 12px 8px;vertical-align:top;">
+        <p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${escapeHtml(name)}</p>
+        ${meta ? `<p style="margin:2px 0 0;color:#64748b;font-size:13px;">${meta}</p>` : ''}
+      </td>
+    </tr>`;
+};
+
+const wireProgress = (status: WireNoticeStatus) => {
+  const steps: [string, boolean][] = [
+    ['Initiated', true],
+    ['Processing', true],
+    [status === 'FAILED' ? 'Not completed' : 'Completed', status === 'SUCCESSFUL'],
+  ];
+
+  const cells = steps
+    .map(
+      ([label, reached]) => `
+      <td style="width:33%;padding:0 3px;vertical-align:top;">
+        <div style="height:4px;border-radius:2px;background:${reached ? WIRE_BLUE.primary : WIRE_BLUE.muted};"></div>
+        <p style="margin:6px 0 0;font-size:11px;font-weight:600;color:${reached ? WIRE_BLUE.primary : '#94a3b8'};text-align:center;">${label}</p>
+      </td>`
+    )
+    .join('');
+  return `<table style="width:100%;border-collapse:collapse;margin:24px 0 4px;"><tr>${cells}</tr></table>`;
+};
+
+export const buildWireTransferNoticeEmail = (n: WireTransferNotice) => {
+  const copy = wireCopy(n);
+  const fmtAmt = formatMoney(n.amount);
+  const currency = escapeHtml(n.currency);
+  const date = `${n.date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC`;
+  const showBalance = n.audience === 'RECIPIENT' && n.isVaultixRecipient && n.status === 'SUCCESSFUL' && n.newBalance != null;
+  const showDashboard = n.audience === 'RECIPIENT' && n.isVaultixRecipient;
+
+  const bankCodeRow = n.recipientSwiftCode
+    ? `<tr><td class="detail-label">SWIFT / BIC</td><td class="detail-value mono" style="font-size:13px;">${escapeHtml(n.recipientSwiftCode)}</td></tr>`
+    : n.recipientRoutingNumber
+      ? `<tr><td class="detail-label">Routing Number</td><td class="detail-value mono" style="font-size:13px;">${escapeHtml(n.recipientRoutingNumber)}</td></tr>`
+      : '';
+
+  const content = `
+    <h1 style="text-align:center;">${copy.title}</h1>
+    <p class="subtitle" style="text-align:center;">${copy.intro}</p>
+
+    <div class="info-box" style="background:${WIRE_BLUE.tint};border:1px solid ${WIRE_BLUE.border};">
+      <p class="info-label" style="color:${WIRE_BLUE.dark};">Transfer Amount</p>
+      <p style="color:${WIRE_BLUE.primary};font-size:28px;font-weight:700;margin:0;">${currency} ${fmtAmt}</p>
+    </div>
+
+    <table style="width:100%;border-collapse:separate;border-spacing:0;border:1px solid ${WIRE_BLUE.muted};border-radius:10px;background:#ffffff;">
+      ${wirePartyRow('From', n.senderName, n.senderBankName, n.senderAccountNumber)}
+      <tr><td colspan="2" style="padding:0 16px;"><div style="border-top:1px dashed ${WIRE_BLUE.border};"></div></td></tr>
+      ${wirePartyRow('To', n.recipientName, n.recipientBankName, n.recipientAccountNumber)}
+    </table>
+
+    ${wireProgress(n.status)}
+
+    <table class="detail-table">
+      <tr>
+        <td class="detail-label">Reference</td>
+        <td class="detail-value mono" style="font-size:12px;">${escapeHtml(n.transactionId)}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Date &amp; Time</td>
+        <td class="detail-value">${date}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Status</td>
+        <td class="detail-value">${WIRE_STATUS_LABEL[n.status]}</td>
+      </tr>
+      <tr>
+        <td class="detail-label">Purpose</td>
+        <td class="detail-value">${escapeHtml(n.reason)}</td>
+      </tr>
+      ${bankCodeRow}
+      ${showBalance ? `<tr><td class="detail-label">New Balance</td><td class="detail-value" style="color:${WIRE_BLUE.primary};">${currency} ${formatMoney(n.newBalance as number)}</td></tr>` : ''}
+    </table>
+
+    <div class="alert-box" style="background:${WIRE_BLUE.tint};border:1px solid ${WIRE_BLUE.border};">
+      <p style="color:${WIRE_BLUE.dark};margin:0;">${copy.note}</p>
+    </div>
+
+    ${
+      showDashboard
+        ? `<div style="text-align:center;margin:24px 0;"><a href="https://vaultixbank.org/login" class="btn" style="background:${WIRE_BLUE.primary};">View in Dashboard</a></div>`
+        : ''
+    }
+
+    <hr class="divider" />
+    <p style="color:#94a3b8;font-size:12px;text-align:center;">
+      Questions about this transfer? <a href="https://vaultixbank.org/support" style="color:${WIRE_BLUE.primary};font-weight:600;">Contact support</a>
+    </p>
+  `;
+
+  const previewStatus = { PENDING: 'is being processed', SUCCESSFUL: 'has been completed', FAILED: 'could not be completed' }[n.status];
+  return wrapEmail(content, `Wire transfer of ${currency} ${fmtAmt} ${previewStatus}`, WIRE_BLUE.primary);
+};
+
+const WIRE_SUBJECTS: Record<WireNoticeAudience, Record<WireNoticeStatus, string>> = {
+  RECIPIENT: {
+    PENDING: 'Vaultix — Incoming Wire Transfer',
+    SUCCESSFUL: 'Vaultix — Wire Transfer Received',
+    FAILED: 'Vaultix — Wire Transfer Update',
+  },
+  SENDER: {
+    PENDING: 'Vaultix — Wire Transfer Initiated',
+    SUCCESSFUL: 'Vaultix — Wire Transfer Completed',
+    FAILED: 'Vaultix — Wire Transfer Update',
+  },
+};
+
+export const sendWireTransferNotice = async (to: string, notice: WireTransferNotice) => {
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      replyTo: REPLY_TO,
+      to,
+      subject: WIRE_SUBJECTS[notice.audience][notice.status],
+      html: buildWireTransferNoticeEmail(notice),
+      headers: emailHeaders,
+    });
+    if (error) {
+      console.error('[EMAIL] Wire transfer notice failed:', JSON.stringify(error));
+    } else {
+      console.log(`[EMAIL] Wire transfer notice (${notice.audience}/${notice.status}) sent to ${to}`);
+    }
+  } catch (err) {
+    console.error('[EMAIL] Wire transfer notice error:', err);
   }
 };
