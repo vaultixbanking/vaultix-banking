@@ -5,7 +5,7 @@ import {
   getUserByAccount,
   updateUserBalance,
 } from './user.controller';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, requireAdmin } from '../../middleware/auth';
 
 const router = Router();
 
@@ -18,7 +18,7 @@ router.get('/info', authenticate, getUserInfo);
 // GET /api/users/:accountNumber  (public - for transfers/lookups)
 router.get('/:accountNumber', getUserByAccount);
 
-// PATCH /api/users/:accountNumber/balance  (admin only in practice)
-router.patch('/:accountNumber/balance', updateUserBalance);
+// PATCH /api/users/:accountNumber/balance  (admin only)
+router.patch('/:accountNumber/balance', authenticate, requireAdmin, updateUserBalance);
 
 export default router;

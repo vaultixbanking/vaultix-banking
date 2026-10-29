@@ -14,7 +14,7 @@ import {
   updateDepositRequestStatus,
   updateFundingTransactionStatus,
 } from './admin.controller';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, requireAdmin } from '../../middleware/auth';
 
 const router = Router();
 
@@ -22,29 +22,29 @@ const router = Router();
 router.post('/login', adminLogin);
 
 // ─── Dashboard Stats (protected) ─────────────────────────────────────────────
-router.get('/stats', authenticate, getAdminStats);
+router.get('/stats', authenticate, requireAdmin, getAdminStats);
 
 // ─── Users Management (protected) ────────────────────────────────────────────
-router.get('/users', authenticate, getAllUsers);
-router.get('/users/:accountNumber', authenticate, getUserByAccount);
-router.post('/users/:accountNumber/credit', authenticate, creditUserAccount);
-router.get('/users/:accountNumber/funding-history', authenticate, getUserFundingHistory);
+router.get('/users', authenticate, requireAdmin, getAllUsers);
+router.get('/users/:accountNumber', authenticate, requireAdmin, getUserByAccount);
+router.post('/users/:accountNumber/credit', authenticate, requireAdmin, creditUserAccount);
+router.get('/users/:accountNumber/funding-history', authenticate, requireAdmin, getUserFundingHistory);
 
 // ─── Deposit Methods (protected) ─────────────────────────────────────────────
-router.get('/deposit-methods', authenticate, getDepositMethods);
-router.post('/deposit-methods', authenticate, upsertDepositMethod);
+router.get('/deposit-methods', authenticate, requireAdmin, getDepositMethods);
+router.post('/deposit-methods', authenticate, requireAdmin, upsertDepositMethod);
 
 // ─── Deposit Address by Crypto Type (public — used by user deposit page) ─────
 router.get('/deposit/:cryptoType', getDepositByCrypto);
 
 // ─── Deposit Requests (admin review) ─────────────────────────────────────────
-router.get('/deposit-requests', authenticate, getAllDepositRequests);
-router.patch('/deposit-requests/:requestId/status', authenticate, updateDepositRequestStatus);
+router.get('/deposit-requests', authenticate, requireAdmin, getAllDepositRequests);
+router.patch('/deposit-requests/:requestId/status', authenticate, requireAdmin, updateDepositRequestStatus);
 
 // ─── Funding Transaction Status (admin update) ──────────────────────────────
-router.patch('/funding-transactions/:transactionId/status', authenticate, updateFundingTransactionStatus);
+router.patch('/funding-transactions/:transactionId/status', authenticate, requireAdmin, updateFundingTransactionStatus);
 
 // ─── Transactions (protected) ─────────────────────────────────────────────────
-router.get('/transactions', authenticate, getAllTransactions);
+router.get('/transactions', authenticate, requireAdmin, getAllTransactions);
 
 export default router;
