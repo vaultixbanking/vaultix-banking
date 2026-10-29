@@ -1,0 +1,38 @@
+# Render Blueprint — Vaultix API (https://render.com/docs/blueprint-spec)
+#
+# Pending Prisma migrations are applied on every deploy, during the build, before the
+# new code goes live. (Pre-deploy commands are only available on paid instance types.)
+#
+# This file only takes effect once the repo is linked as a Blueprint in Render
+# (New > Blueprint). Before linking, compare it with the service's current settings
+# (select the service in the dashboard > Generate Blueprint): any option missing here
+# falls back to Render's default. In particular, add `region:` if the service is not in
+# Oregon, and change `plan:` if it is not on the free instance type.
+
+services:
+  - type: web
+    name: vaultix-banking
+    runtime: node
+    plan: free
+    rootDir: server
+    # --include=dev: prisma and typescript are devDependencies and are needed to build
+    buildCommand: npm install --include=dev && npx prisma migrate deploy && npx prisma generate && npm run build
+    startCommand: npm start
+    envVars:
+      # Values already set in the dashboard are kept; these are listed so new
+      # environments prompt for them. DIRECT_URL must be the non-pooled (port 5432)
+      # Supabase URL — migrations do not work through PgBouncer.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: NODE_ENV
+        sync: false
