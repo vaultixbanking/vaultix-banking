@@ -11,84 +11,206 @@ const emailHeaders = {
   'List-Unsubscribe': '<mailto:unsubscribe@vaultixbank.org>',
 };
 
-// ─── Shared Styles (inline-safe for email clients) ──────────────────────────
+// ─── Brand & Layout ─────────────────────────────────────────────────────────
+// Every style is inline: some Gmail clients drop <style> blocks, so classes can't be relied on.
 
-const baseStyles = `
-  body { margin:0; padding:0; background-color:#f1f5f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; -webkit-font-smoothing:antialiased; }
-  .wrapper { width:100%; background-color:#f1f5f9; padding:40px 16px; }
-  .card { max-width:560px; margin:0 auto; background:#ffffff; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; }
-  .header { background:#0f172a; padding:28px 32px; text-align:center; }
-  .header-brand { color:#ffffff; font-size:20px; font-weight:700; letter-spacing:-0.3px; margin:0; }
-  .body-content { padding:32px; }
-  .footer { padding:20px 32px; border-top:1px solid #e2e8f0; text-align:center; }
-  .footer p { color:#94a3b8; font-size:11px; margin:2px 0; line-height:1.5; }
-  .footer a { color:#94a3b8; text-decoration:underline; }
-  h1 { color:#0f172a; font-size:22px; font-weight:700; margin:0 0 8px; line-height:1.3; }
-  .subtitle { color:#64748b; font-size:15px; margin:0 0 24px; line-height:1.6; }
-  .btn { display:inline-block; padding:12px 28px; color:#ffffff; text-decoration:none; border-radius:8px; font-weight:600; font-size:14px; text-align:center; }
-  .btn-primary { background:#0f172a; }
-  .btn-green { background:#16a34a; }
-  .btn-red { background:#dc2626; }
-  .info-box { border-radius:10px; padding:20px; text-align:center; margin:24px 0; }
-  .info-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; margin:0 0 6px; }
-  .info-value { font-size:26px; font-weight:700; font-family:'SF Mono',Monaco,'Cascadia Code',Consolas,monospace; margin:0; }
-  .detail-table { width:100%; border-collapse:collapse; margin:20px 0; }
-  .detail-table td { padding:12px 0; font-size:14px; vertical-align:top; }
-  .detail-table tr { border-bottom:1px solid #f1f5f9; }
-  .detail-table tr:last-child { border-bottom:none; }
-  .detail-label { color:#64748b; font-weight:500; }
-  .detail-value { color:#0f172a; font-weight:600; text-align:right; }
-  .alert-box { border-radius:8px; padding:14px 18px; margin:20px 0; font-size:13px; line-height:1.5; }
-  .divider { border:none; border-top:1px solid #e2e8f0; margin:24px 0; }
-  .amount-credit { color:#16a34a; font-size:28px; font-weight:700; margin:0; }
-  .amount-debit { color:#dc2626; font-size:28px; font-weight:700; margin:0; }
-  .feature-grid { width:100%; border-spacing:8px; border-collapse:separate; }
-  .feature-cell { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px 10px; text-align:center; width:33%; vertical-align:top; }
-  .feature-title { color:#0f172a; font-size:12px; font-weight:600; margin:6px 0 2px; }
-  .feature-desc { color:#94a3b8; font-size:11px; margin:0; }
-  .step-num { display:inline-block; width:24px; height:24px; background:#0f172a; color:#fff; border-radius:50%; text-align:center; line-height:24px; font-size:12px; font-weight:700; }
-  .step-title { color:#0f172a; font-weight:600; font-size:14px; margin:0; }
-  .step-desc { color:#64748b; font-size:13px; margin:2px 0 0; }
-  .mono { font-family:'SF Mono',Monaco,'Cascadia Code',Consolas,monospace; }
-`;
+const SITE_URL = 'https://vaultixbank.org';
+// Images load from the www host directly: the apex domain redirects to it
+const ASSET_URL = 'https://www.vaultixbank.org/brand';
 
-const headerHtml = (background?: string) => `
-  <div class="header"${background ? ` style="background:${background};"` : ''}>
-    <p class="header-brand">VAULTIX</p>
-  </div>
-`;
+const COLOR = {
+  blue: '#2563eb',
+  blueDark: '#1e40af',
+  tint: '#eff6ff',
+  border: '#bfdbfe',
+  soft: '#dbeafe',
+  ink: '#0f172a',
+  muted: '#64748b',
+  faint: '#94a3b8',
+  line: '#e2e8f0',
+  page: '#f1f5f9',
+};
 
-const footerHtml = `
-  <div class="footer">
-    <p>&copy; ${new Date().getFullYear()} Vaultix Bank. All rights reserved.</p>
-    <p style="margin-top:6px;">
-      <a href="https://vaultixbank.org/privacy">Privacy</a> &middot;
-      <a href="https://vaultixbank.org/terms">Terms</a> &middot;
-      <a href="https://vaultixbank.org/support">Support</a>
-    </p>
-  </div>
-`;
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+const MONO = "'SF Mono',Monaco,'Cascadia Code',Consolas,monospace";
 
-const wrapEmail = (content: string, previewText: string, headerBackground?: string) => `
-<!DOCTYPE html>
+// Names, descriptions and bank details are typed in by customers or admins, so they
+// must be escaped before going into HTML
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const maskAccount = (accountNumber: string) =>
+  accountNumber.length > 4 ? `••••${accountNumber.slice(-4)}` : accountNumber;
+
+const formatMoney = (amount: number) =>
+  amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const heading = (title: string, intro: string) => `
+  <h1 style="margin:0 0 8px;color:${COLOR.ink};font-family:${FONT};font-size:22px;font-weight:700;line-height:1.3;text-align:center;">${title}</h1>
+  <p style="margin:0 0 24px;color:${COLOR.muted};font-family:${FONT};font-size:15px;line-height:1.6;text-align:center;">${intro}</p>`;
+
+const amountPanel = (label: string, value: string, mono = false) => `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;background:${COLOR.tint};border:1px solid ${COLOR.border};border-radius:10px;border-collapse:separate;">
+    <tr>
+      <td style="padding:20px;text-align:center;">
+        <p style="margin:0 0 6px;color:${COLOR.blueDark};font-family:${FONT};font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">${label}</p>
+        <p style="margin:0;color:${COLOR.blue};font-family:${mono ? MONO : FONT};font-size:${mono ? 26 : 28}px;font-weight:700;line-height:1.2;">${value}</p>
+      </td>
+    </tr>
+  </table>`;
+
+type DetailRow = [label: string, value: string, style?: { mono?: boolean; accent?: boolean; size?: number }];
+
+const detailTable = (rows: DetailRow[]) => `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;border-collapse:collapse;">
+    ${rows
+      .map(([label, value, style], i) => {
+        const divider = i < rows.length - 1 ? `border-bottom:1px solid ${COLOR.page};` : '';
+        const size = style?.size ?? (style?.mono ? 12 : 14);
+        return `
+    <tr>
+      <td style="padding:12px 0;${divider}color:${COLOR.muted};font-family:${FONT};font-size:14px;font-weight:500;vertical-align:top;">${label}</td>
+      <td style="padding:12px 0 12px 16px;${divider}color:${style?.accent ? COLOR.blue : COLOR.ink};font-family:${style?.mono ? MONO : FONT};font-size:${size}px;font-weight:600;text-align:right;vertical-align:top;word-break:break-word;">${value}</td>
+    </tr>`;
+      })
+      .join('')}
+  </table>`;
+
+const note = (html: string) => `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;background:${COLOR.tint};border:1px solid ${COLOR.border};border-radius:8px;border-collapse:separate;">
+    <tr>
+      <td style="padding:14px 18px;color:${COLOR.blueDark};font-family:${FONT};font-size:13px;line-height:1.5;">${html}</td>
+    </tr>
+  </table>`;
+
+const button = (href: string, label: string) => `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:24px auto;">
+    <tr>
+      <td style="border-radius:8px;background:${COLOR.blue};">
+        <a href="${href}" style="display:inline-block;padding:12px 28px;color:#ffffff;font-family:${FONT};font-size:14px;font-weight:600;line-height:1.2;text-decoration:none;border-radius:8px;">${label}</a>
+      </td>
+    </tr>
+  </table>`;
+
+const progressSteps = (steps: [label: string, reached: boolean][]) => {
+  const cells = steps
+    .map(
+      ([label, reached]) => `
+      <td style="width:${Math.floor(100 / steps.length)}%;padding:0 3px;vertical-align:top;">
+        <div style="height:4px;border-radius:2px;background:${reached ? COLOR.blue : COLOR.soft};font-size:0;line-height:0;">&nbsp;</div>
+        <p style="margin:6px 0 0;color:${reached ? COLOR.blue : COLOR.faint};font-family:${FONT};font-size:11px;font-weight:600;text-align:center;">${label}</p>
+      </td>`
+    )
+    .join('');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 4px;border-collapse:collapse;"><tr>${cells}</tr></table>`;
+};
+
+const numberedSteps = (items: [title: string, description: string][]) => `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+    ${items
+      .map(
+        ([title, description], i) => `
+    <tr>
+      <td style="width:24px;padding:0 0 14px;vertical-align:top;">
+        <div style="width:24px;height:24px;border-radius:12px;background:${COLOR.blue};color:#ffffff;font-family:${FONT};font-size:12px;font-weight:700;line-height:24px;text-align:center;">${i + 1}</div>
+      </td>
+      <td style="padding:0 0 14px 12px;vertical-align:top;">
+        <p style="margin:0;color:${COLOR.ink};font-family:${FONT};font-size:14px;font-weight:600;line-height:1.4;">${title}</p>
+        <p style="margin:2px 0 0;color:${COLOR.muted};font-family:${FONT};font-size:13px;line-height:1.5;">${description}</p>
+      </td>
+    </tr>`
+      )
+      .join('')}
+  </table>`;
+
+const featureRow = (items: [title: string, description: string][]) => `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px;border-collapse:separate;border-spacing:8px 0;">
+    <tr>
+      ${items
+        .map(
+          ([title, description]) => `
+      <td style="width:${Math.floor(100 / items.length)}%;padding:14px 8px;background:${COLOR.tint};border:1px solid ${COLOR.border};border-radius:8px;text-align:center;vertical-align:top;">
+        <p style="margin:0 0 2px;color:${COLOR.ink};font-family:${FONT};font-size:12px;font-weight:600;">${title}</p>
+        <p style="margin:0;color:${COLOR.muted};font-family:${FONT};font-size:11px;">${description}</p>
+      </td>`
+        )
+        .join('')}
+    </tr>
+  </table>`;
+
+const smallPrint = (text: string) =>
+  `<p style="margin:0 0 8px;color:${COLOR.muted};font-family:${FONT};font-size:13px;line-height:1.6;text-align:center;">${text}</p>`;
+
+const divider = `<hr style="border:none;border-top:1px solid ${COLOR.line};margin:24px 0;" />`;
+
+const linkFallback = (url: string) => `
+  ${divider}
+  <p style="margin:0 0 4px;color:${COLOR.muted};font-family:${FONT};font-size:12px;line-height:1.6;text-align:center;">Button not working? Copy this link into your browser:</p>
+  <p style="margin:0;font-family:${MONO};font-size:11px;line-height:1.5;text-align:center;word-break:break-all;"><a href="${url}" style="color:${COLOR.blue};">${url}</a></p>`;
+
+const helpLine = (question: string, linkLabel = 'Contact support') => `
+  ${divider}
+  <p style="margin:0;color:${COLOR.faint};font-family:${FONT};font-size:12px;line-height:1.6;text-align:center;">
+    ${question} <a href="${SITE_URL}/support" style="color:${COLOR.blue};font-weight:600;">${linkLabel}</a>
+  </p>`;
+
+const footerLink = (path: string, label: string) =>
+  `<a href="${SITE_URL}/${path}" style="color:${COLOR.blue};font-weight:600;text-decoration:none;">${label}</a>`;
+
+// Built per email so the year is never stale on a long-running server
+const footerHtml = () => `
+  <img src="${ASSET_URL}/vaultix-mark.png" width="28" height="28" alt="" style="display:block;width:28px;height:28px;margin:0 auto 10px;border:0;outline:none;" />
+  <p style="margin:0 0 4px;color:${COLOR.ink};font-family:${FONT};font-size:13px;font-weight:600;">Vaultix Bank</p>
+  <p style="margin:0 0 12px;color:${COLOR.muted};font-family:${FONT};font-size:12px;line-height:1.6;">Vaultix will never ask for your password, PIN or verification code by email.</p>
+  <p style="margin:0 0 12px;font-family:${FONT};font-size:12px;line-height:1.6;">
+    ${footerLink('support', 'Support')}
+    <span style="color:${COLOR.faint};">&nbsp;&middot;&nbsp;</span>
+    ${footerLink('privacy', 'Privacy')}
+    <span style="color:${COLOR.faint};">&nbsp;&middot;&nbsp;</span>
+    ${footerLink('terms', 'Terms')}
+  </p>
+  <p style="margin:0;color:${COLOR.faint};font-family:${FONT};font-size:11px;">&copy; ${new Date().getFullYear()} Vaultix Bank. All rights reserved.</p>`;
+
+const wrapEmail = (content: string, previewText: string) => `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
   <title>Vaultix Bank</title>
-  <style>${baseStyles}</style>
+  <style>
+    @media (max-width: 480px) { .vx-pad { padding-left: 20px !important; padding-right: 20px !important; } }
+  </style>
 </head>
-<body>
-  <div style="display:none;max-height:0;overflow:hidden;">${previewText}</div>
-  <div class="wrapper">
-    <div class="card">
-      ${headerHtml(headerBackground)}
-      <div class="body-content">
-        ${content}
-      </div>
-      ${footerHtml}
-    </div>
-  </div>
+<body style="margin:0;padding:0;background:${COLOR.page};-webkit-font-smoothing:antialiased;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${previewText}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${COLOR.page};">
+    <tr>
+      <td align="center" style="padding:32px 12px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border:1px solid ${COLOR.line};border-radius:12px;border-collapse:separate;">
+          <tr>
+            <td style="background:${COLOR.blue};padding:26px 32px;text-align:center;border-radius:11px 11px 0 0;">
+              <a href="${SITE_URL}" style="text-decoration:none;">
+                <img src="${ASSET_URL}/vaultix-logo-white.png" width="116" height="36" alt="Vaultix" style="display:inline-block;width:116px;height:36px;border:0;outline:none;color:#ffffff;font-family:${FONT};font-size:22px;font-weight:700;" />
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td class="vx-pad" style="padding:32px;">${content}</td>
+          </tr>
+          <tr>
+            <td class="vx-pad" style="padding:24px 32px 28px;border-top:1px solid ${COLOR.line};text-align:center;">${footerHtml()}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
 `;
@@ -96,26 +218,12 @@ const wrapEmail = (content: string, previewText: string, headerBackground?: stri
 // ─── Email Templates ────────────────────────────────────────────────────────
 
 export const buildVerificationEmail = (username: string, verificationLink: string) => {
+  const link = escapeHtml(verificationLink);
   const content = `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="display:inline-block;width:56px;height:56px;background:#eff6ff;border-radius:50%;line-height:56px;">
-        <span style="font-size:24px;">✉️</span>
-      </div>
-    </div>
-    <h1 style="text-align:center;">Verify Your Email</h1>
-    <p class="subtitle" style="text-align:center;">
-      Hi ${username}, thanks for signing up with Vaultix. Please verify your email address to activate your account.
-    </p>
-    <div style="text-align:center;margin:28px 0;">
-      <a href="${verificationLink}" class="btn btn-primary">Verify Email Address</a>
-    </div>
-    <hr class="divider" />
-    <p style="color:#94a3b8;font-size:12px;text-align:center;line-height:1.6;">
-      This link expires in 24 hours. If you didn't create a Vaultix account, you can safely ignore this email.
-    </p>
-    <p style="color:#cbd5e1;font-size:11px;text-align:center;margin-top:12px;word-break:break-all;" class="mono">
-      ${verificationLink}
-    </p>
+    ${heading('Verify Your Email', `Hi ${escapeHtml(username)}, thanks for signing up with Vaultix. Please verify your email address to activate your account.`)}
+    ${button(link, 'Verify Email Address')}
+    ${smallPrint('This link expires in 24 hours. If you didn’t create a Vaultix account, you can safely ignore this email.')}
+    ${linkFallback(link)}
   `;
   return wrapEmail(content, 'Verify your Vaultix account email address');
 };
@@ -130,150 +238,56 @@ export const buildVerificationReminderEmail = (
   verificationLink: string,
   loginUrl: string
 ) => {
-  // Fully inline-styled: some Gmail clients drop <style> blocks, so classes can't be relied on here
-  const text = 'color:#334155;font-size:15px;line-height:1.6;margin:0 0 16px;';
-  const small = 'color:#64748b;font-size:13px;line-height:1.6;margin:0 0 8px;';
+  const link = escapeHtml(verificationLink);
+  const login = escapeHtml(loginUrl);
   const content = `
-    <p style="margin:0 0 20px;">
-      <span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #dbeafe;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;">Account activation</span>
-    </p>
-    <h1 style="color:#0f172a;font-size:24px;font-weight:700;line-height:1.3;margin:0 0 20px;">Activate your Vaultix account</h1>
-    <p style="${text}">Hi ${fullName},</p>
-    <p style="${text}margin-bottom:28px;">
-      We're sorry. A temporary problem with our email service meant your verification email never reached you, so you couldn't sign in. The problem is fixed, and your account and details are safe.
-    </p>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;">
-      <tr>
-        <td align="center">
-          <a href="${verificationLink}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;line-height:1;padding:16px 32px;border-radius:8px;">Verify Email &amp; Activate Account</a>
-        </td>
-      </tr>
-    </table>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin:0 0 24px;">
-      <tr>
-        <td style="padding:16px 20px;border-bottom:1px solid #e2e8f0;">
-          <p style="color:#64748b;font-size:12px;margin:0 0 4px;">Your username</p>
-          <p style="color:#0f172a;font-size:16px;font-weight:600;margin:0;">${username}</p>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:16px 20px;">
-          <p style="color:#64748b;font-size:12px;margin:0 0 4px;">After verifying, sign in at</p>
-          <p style="font-size:16px;font-weight:600;margin:0;"><a href="${loginUrl}" style="color:#2563eb;text-decoration:none;">${loginUrl.replace(/^https?:\/\//, '')}</a></p>
-        </td>
-      </tr>
-    </table>
-    <p style="${small}">You don't need to sign up again or reset your password. This link expires in 7 days. If you've already verified your email, you can ignore this message.</p>
-    <p style="${small}margin-bottom:24px;">Vaultix will never ask for your password or PIN by email.</p>
-    <hr style="border:none;border-top:1px solid #e2e8f0;margin:0 0 16px;" />
-    <p style="color:#64748b;font-size:12px;line-height:1.6;margin:0 0 4px;">Button not working? Copy this link into your browser:</p>
-    <p style="font-size:12px;line-height:1.5;margin:0;word-break:break-all;"><a href="${verificationLink}" style="color:#2563eb;">${verificationLink}</a></p>
+    ${heading(
+      'Activate Your Vaultix Account',
+      `Hi ${escapeHtml(fullName)}, we’re sorry. A temporary problem with our email service meant your verification email never reached you, so you couldn’t sign in. The problem is fixed, and your account and details are safe.`
+    )}
+    ${button(link, 'Verify Email &amp; Activate Account')}
+    ${detailTable([
+      ['Your username', escapeHtml(username)],
+      ['Sign in at', `<a href="${login}" style="color:${COLOR.blue};text-decoration:none;">${login.replace(/^https?:\/\//, '')}</a>`],
+    ])}
+    ${smallPrint('You don’t need to sign up again or reset your password. This link expires in 7 days. If you’ve already verified your email, you can ignore this message.')}
+    ${linkFallback(link)}
   `;
   return wrapEmail(content, 'Sorry for the delay. Here is your link to activate your Vaultix account.');
 };
 
 export const buildPasswordResetEmail = (username: string, resetLink: string) => {
+  const link = escapeHtml(resetLink);
   const content = `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="display:inline-block;width:56px;height:56px;background:#eff6ff;border-radius:50%;line-height:56px;">
-        <span style="font-size:24px;">🔑</span>
-      </div>
-    </div>
-    <h1 style="text-align:center;">Reset Your Password</h1>
-    <p class="subtitle" style="text-align:center;">
-      Hi ${username}, we received a request to reset the password for your Vaultix account. Click the button below to choose a new one.
-    </p>
-    <div style="text-align:center;margin:28px 0;">
-      <a href="${resetLink}" class="btn btn-primary">Reset Password</a>
-    </div>
-    <hr class="divider" />
-    <p style="color:#94a3b8;font-size:12px;text-align:center;line-height:1.6;">
-      This link expires in 1 hour and can only be used once. If you didn't request a password reset, you can safely ignore this email — your password will not change.
-    </p>
-    <p style="color:#cbd5e1;font-size:11px;text-align:center;margin-top:12px;word-break:break-all;" class="mono">
-      ${resetLink}
-    </p>
+    ${heading('Reset Your Password', `Hi ${escapeHtml(username)}, we received a request to reset the password for your Vaultix account. Use the button below to choose a new one.`)}
+    ${button(link, 'Reset Password')}
+    ${smallPrint('This link expires in 1 hour and can only be used once. If you didn’t request a password reset, you can safely ignore this email. Your password will not change.')}
+    ${linkFallback(link)}
   `;
   return wrapEmail(content, 'Reset your Vaultix account password');
 };
 
 export const buildWelcomeEmail = (username: string, accountNumber: string) => {
+  const name = escapeHtml(username);
   const content = `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="display:inline-block;width:56px;height:56px;background:#f0fdf4;border-radius:50%;line-height:56px;">
-        <span style="font-size:24px;">✅</span>
-      </div>
-    </div>
-    <h1 style="text-align:center;">Welcome to Vaultix, ${username}!</h1>
-    <p class="subtitle" style="text-align:center;">
-      Your email has been verified and your secure banking account is now active.
-    </p>
-
-    <div class="info-box" style="background:#f8fafc;border:1px solid #e2e8f0;">
-      <p class="info-label" style="color:#64748b;">Your Account Number</p>
-      <p class="info-value" style="color:#0f172a;">${accountNumber}</p>
-    </div>
-
-    <table class="feature-grid" role="presentation">
-      <tr>
-        <td class="feature-cell">
-          <div style="font-size:20px;margin-bottom:4px;">🔒</div>
-          <p class="feature-title">Secure Banking</p>
-          <p class="feature-desc">256-bit encryption</p>
-        </td>
-        <td class="feature-cell">
-          <div style="font-size:20px;margin-bottom:4px;">🕐</div>
-          <p class="feature-title">24/7 Access</p>
-          <p class="feature-desc">Bank anytime</p>
-        </td>
-        <td class="feature-cell">
-          <div style="font-size:20px;margin-bottom:4px;">🛡️</div>
-          <p class="feature-title">FDIC Insured</p>
-          <p class="feature-desc">Up to $250,000</p>
-        </td>
-      </tr>
-    </table>
-
-    <div style="text-align:center;margin:28px 0;">
-      <a href="https://vaultixbank.org/login" class="btn btn-primary">Go to Dashboard</a>
-    </div>
-
-    <hr class="divider" />
-
-    <p style="color:#0f172a;font-size:16px;font-weight:600;margin:0 0 16px;">Getting Started</p>
-
-    <table role="presentation" style="width:100%;">
-      <tr>
-        <td style="width:32px;vertical-align:top;padding-bottom:14px;"><span class="step-num">1</span></td>
-        <td style="padding-left:10px;padding-bottom:14px;">
-          <p class="step-title">Complete your profile</p>
-          <p class="step-desc">Add preferences and security settings</p>
-        </td>
-      </tr>
-      <tr>
-        <td style="width:32px;vertical-align:top;padding-bottom:14px;"><span class="step-num">2</span></td>
-        <td style="padding-left:10px;padding-bottom:14px;">
-          <p class="step-title">Fund your account</p>
-          <p class="step-desc">Make your first deposit and start banking</p>
-        </td>
-      </tr>
-      <tr>
-        <td style="width:32px;vertical-align:top;"><span class="step-num">3</span></td>
-        <td style="padding-left:10px;">
-          <p class="step-title">Send &amp; receive money</p>
-          <p class="step-desc">Enjoy fast, secure transfers worldwide</p>
-        </td>
-      </tr>
-    </table>
-
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin-top:24px;">
-      <p style="color:#0f172a;font-weight:600;font-size:13px;margin:0 0 4px;">Need help?</p>
-      <p style="color:#64748b;font-size:12px;margin:0;">
-        Our support team is available 24/7 — <a href="https://vaultixbank.org/support" style="color:#0f172a;font-weight:600;text-decoration:none;">Contact Support &rarr;</a>
-      </p>
-    </div>
+    ${heading(`Welcome to Vaultix, ${name}`, 'Your email has been verified and your account is now active.')}
+    ${amountPanel('Your Account Number', escapeHtml(accountNumber), true)}
+    ${featureRow([
+      ['Secure Banking', '256-bit encryption'],
+      ['24/7 Access', 'Bank anytime'],
+      ['FDIC Insured', 'Up to $250,000'],
+    ])}
+    ${button(`${SITE_URL}/login`, 'Go to Dashboard')}
+    ${divider}
+    <p style="margin:0 0 16px;color:${COLOR.ink};font-family:${FONT};font-size:15px;font-weight:600;">Getting started</p>
+    ${numberedSteps([
+      ['Complete your profile', 'Add your preferences and security settings.'],
+      ['Fund your account', 'Make your first deposit and start banking.'],
+      ['Send and receive money', 'Make fast, secure transfers at home and abroad.'],
+    ])}
+    ${helpLine('Need help with your new account?')}
   `;
-  return wrapEmail(content, `Welcome to Vaultix, ${username}! Your account is ready.`);
+  return wrapEmail(content, `Welcome to Vaultix, ${name}! Your account is ready.`);
 };
 
 export const buildCreditNotificationEmail = (
@@ -284,53 +298,20 @@ export const buildCreditNotificationEmail = (
   description: string,
   transactionDate: string
 ) => {
-  const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
-  const fmtBal = newBalance.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const cur = escapeHtml(currency);
   const content = `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="display:inline-block;width:56px;height:56px;background:#f0fdf4;border-radius:50%;line-height:56px;">
-        <span style="font-size:24px;">💰</span>
-      </div>
-    </div>
-    <h1 style="text-align:center;">Money Received</h1>
-    <p class="subtitle" style="text-align:center;">
-      Hi ${username}, your Vaultix account has been credited.
-    </p>
-
-    <div class="info-box" style="background:#f0fdf4;border:1px solid #bbf7d0;">
-      <p class="info-label" style="color:#166534;">Amount Credited</p>
-      <p class="amount-credit">+${currency} ${fmtAmt}</p>
-    </div>
-
-    <table class="detail-table">
-      <tr>
-        <td class="detail-label">Description</td>
-        <td class="detail-value">${description}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Date &amp; Time</td>
-        <td class="detail-value">${transactionDate}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">New Balance</td>
-        <td class="detail-value" style="color:#16a34a;">${currency} ${fmtBal}</td>
-      </tr>
-    </table>
-
-    <div class="alert-box" style="background:#f0fdf4;border:1px solid #bbf7d0;">
-      <p style="color:#166534;margin:0;">✅ This credit is available in your account immediately.</p>
-    </div>
-
-    <div style="text-align:center;margin:24px 0;">
-      <a href="https://vaultixbank.org/login" class="btn btn-green">View Account</a>
-    </div>
-
-    <hr class="divider" />
-    <p style="color:#94a3b8;font-size:12px;text-align:center;">
-      Didn't expect this? <a href="https://vaultixbank.org/support" style="color:#0f172a;font-weight:600;">Contact support</a>
-    </p>
+    ${heading('Money Received', `Hi ${escapeHtml(username)}, your Vaultix account has been credited.`)}
+    ${amountPanel('Amount Credited', `+${cur} ${formatMoney(amount)}`)}
+    ${detailTable([
+      ['Description', escapeHtml(description)],
+      ['Date &amp; Time', escapeHtml(transactionDate)],
+      ['New Balance', `${cur} ${formatMoney(newBalance)}`, { accent: true }],
+    ])}
+    ${note('The funds are available in your account now.')}
+    ${button(`${SITE_URL}/login`, 'View Account')}
+    ${helpLine('Didn’t expect this?')}
   `;
-  return wrapEmail(content, `You received ${currency} ${fmtAmt} in your Vaultix account`);
+  return wrapEmail(content, `You received ${cur} ${formatMoney(amount)} in your Vaultix account`);
 };
 
 // ─── Withdrawal / Debit Email Templates ─────────────────────────────────────
@@ -343,70 +324,38 @@ const buildDebitContent = (
   transactionId: string,
   transactionDate: string,
   title: string,
-  icon: string,
-  detailRows: string
+  detailRows: DetailRow[]
 ) => {
-  const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
-  const fmtBal = newBalance.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const cur = escapeHtml(currency);
   return `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="display:inline-block;width:56px;height:56px;background:#fef2f2;border-radius:50%;line-height:56px;">
-        <span style="font-size:24px;">${icon}</span>
-      </div>
-    </div>
-    <h1 style="text-align:center;">${title}</h1>
-    <p class="subtitle" style="text-align:center;">
-      Hi ${username}, a transaction has been processed on your account.
-    </p>
-
-    <div class="info-box" style="background:#fef2f2;border:1px solid #fecaca;">
-      <p class="info-label" style="color:#991b1b;">Amount Debited</p>
-      <p class="amount-debit">-${currency} ${fmtAmt}</p>
-    </div>
-
-    <table class="detail-table">
-      <tr>
-        <td class="detail-label">Transaction ID</td>
-        <td class="detail-value mono" style="font-size:12px;">${transactionId}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Date &amp; Time</td>
-        <td class="detail-value">${transactionDate}</td>
-      </tr>
-      ${detailRows}
-      <tr>
-        <td class="detail-label">Remaining Balance</td>
-        <td class="detail-value">${currency} ${fmtBal}</td>
-      </tr>
-    </table>
-
-    <div class="alert-box" style="background:#fef2f2;border:1px solid #fecaca;">
-      <p style="color:#991b1b;margin:0;">🔔 This debit has been processed from your account.</p>
-    </div>
-
-    <div style="text-align:center;margin:24px 0;">
-      <a href="https://vaultixbank.org/login" class="btn btn-red">View Transaction</a>
-    </div>
-
-    <hr class="divider" />
-    <p style="color:#94a3b8;font-size:12px;text-align:center;">
-      Didn't authorize this? <a href="https://vaultixbank.org/support" style="color:#dc2626;font-weight:600;">Contact support immediately</a>
-    </p>
+    ${heading(title, `Hi ${escapeHtml(username)}, a transaction has been processed on your account.`)}
+    ${amountPanel('Amount Debited', `-${cur} ${formatMoney(amount)}`)}
+    ${detailTable([
+      ['Transaction ID', escapeHtml(transactionId), { mono: true }],
+      ['Date &amp; Time', escapeHtml(transactionDate)],
+      ...detailRows,
+      ['Remaining Balance', `${cur} ${formatMoney(newBalance)}`],
+    ])}
+    ${note('If you didn’t make this transaction, contact our support team immediately.')}
+    ${button(`${SITE_URL}/login`, 'View Transaction')}
+    ${helpLine('Questions about this transaction?')}
   `;
 };
+
+const debitPreview = (kind: string, amount: number, currency: string) =>
+  `${kind} of ${escapeHtml(currency)} ${formatMoney(amount)} processed`;
 
 export const buildWireTransferEmail = (
   username: string, amount: number, currency: string, newBalance: number,
   transactionId: string, transactionDate: string,
   beneficiaryName: string, bankName: string, swiftCode: string
 ) => {
-  const details = `
-    <tr><td class="detail-label">Beneficiary</td><td class="detail-value">${beneficiaryName}</td></tr>
-    <tr><td class="detail-label">Bank</td><td class="detail-value">${bankName}</td></tr>
-    <tr><td class="detail-label">SWIFT / BIC</td><td class="detail-value mono" style="font-size:12px;">${swiftCode}</td></tr>
-  `;
-  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Wire Transfer Sent', '🌐', details);
-  return wrapEmail(content, `Wire transfer of ${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} processed`);
+  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Wire Transfer Sent', [
+    ['Beneficiary', escapeHtml(beneficiaryName)],
+    ['Bank', escapeHtml(bankName)],
+    ['SWIFT / BIC', escapeHtml(swiftCode), { mono: true }],
+  ]);
+  return wrapEmail(content, debitPreview('Wire transfer', amount, currency));
 };
 
 export const buildDomesticTransferEmail = (
@@ -414,13 +363,12 @@ export const buildDomesticTransferEmail = (
   transactionId: string, transactionDate: string,
   recipientName: string, bankName: string, accountNumber: string
 ) => {
-  const details = `
-    <tr><td class="detail-label">Recipient</td><td class="detail-value">${recipientName}</td></tr>
-    <tr><td class="detail-label">Bank</td><td class="detail-value">${bankName}</td></tr>
-    <tr><td class="detail-label">Account</td><td class="detail-value mono" style="font-size:12px;">${accountNumber}</td></tr>
-  `;
-  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Domestic Transfer Sent', '🏦', details);
-  return wrapEmail(content, `Domestic transfer of ${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} processed`);
+  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Domestic Transfer Sent', [
+    ['Recipient', escapeHtml(recipientName)],
+    ['Bank', escapeHtml(bankName)],
+    ['Account', escapeHtml(maskAccount(accountNumber)), { mono: true }],
+  ]);
+  return wrapEmail(content, debitPreview('Domestic transfer', amount, currency));
 };
 
 export const buildBankWithdrawalEmail = (
@@ -428,13 +376,11 @@ export const buildBankWithdrawalEmail = (
   transactionId: string, transactionDate: string,
   bankName: string, accountNumber: string
 ) => {
-  const maskedAccount = accountNumber.length > 4 ? '••••' + accountNumber.slice(-4) : accountNumber;
-  const details = `
-    <tr><td class="detail-label">Withdrawal To</td><td class="detail-value">${bankName}</td></tr>
-    <tr><td class="detail-label">Account</td><td class="detail-value mono" style="font-size:12px;">${maskedAccount}</td></tr>
-  `;
-  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Bank Withdrawal', '🏧', details);
-  return wrapEmail(content, `Bank withdrawal of ${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} processed`);
+  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Bank Withdrawal', [
+    ['Withdrawal To', escapeHtml(bankName)],
+    ['Account', escapeHtml(maskAccount(accountNumber)), { mono: true }],
+  ]);
+  return wrapEmail(content, debitPreview('Bank withdrawal', amount, currency));
 };
 
 export const buildCryptoWithdrawalEmail = (
@@ -442,14 +388,14 @@ export const buildCryptoWithdrawalEmail = (
   transactionId: string, transactionDate: string,
   cryptoType: string, walletAddress: string, network: string
 ) => {
-  const shortAddr = walletAddress.length > 12 ? walletAddress.slice(0, 6) + '••••' + walletAddress.slice(-6) : walletAddress;
-  const details = `
-    <tr><td class="detail-label">Crypto</td><td class="detail-value" style="text-transform:capitalize;">${cryptoType}</td></tr>
-    <tr><td class="detail-label">Wallet</td><td class="detail-value mono" style="font-size:11px;">${shortAddr}</td></tr>
-    ${network ? `<tr><td class="detail-label">Network</td><td class="detail-value">${network}</td></tr>` : ''}
-  `;
-  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Crypto Withdrawal', '₿', details);
-  return wrapEmail(content, `Crypto withdrawal of ${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} processed`);
+  const shortAddr = walletAddress.length > 12 ? `${walletAddress.slice(0, 6)}••••${walletAddress.slice(-6)}` : walletAddress;
+  const crypto = cryptoType.charAt(0).toUpperCase() + cryptoType.slice(1);
+  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Crypto Withdrawal', [
+    ['Crypto', escapeHtml(crypto)],
+    ['Wallet', escapeHtml(shortAddr), { mono: true, size: 11 }],
+    ...(network ? [['Network', escapeHtml(network)] as DetailRow] : []),
+  ]);
+  return wrapEmail(content, debitPreview('Crypto withdrawal', amount, currency));
 };
 
 // Generic debit (fallback)
@@ -457,11 +403,10 @@ export const buildDebitNotificationEmail = (
   username: string, amount: number, currency: string, newBalance: number,
   transactionType: string, transactionId: string, transactionDate: string
 ) => {
-  const details = `
-    <tr><td class="detail-label">Type</td><td class="detail-value">${transactionType}</td></tr>
-  `;
-  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Money Sent', '💸', details);
-  return wrapEmail(content, `Debit of ${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} from your Vaultix account`);
+  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Money Sent', [
+    ['Type', escapeHtml(transactionType)],
+  ]);
+  return wrapEmail(content, `Debit of ${escapeHtml(currency)} ${formatMoney(amount)} from your Vaultix account`);
 };
 
 // ─── Send Functions ─────────────────────────────────────────────────────────
@@ -661,56 +606,22 @@ export const buildPendingDepositEmail = (
   transactionId: string,
   transactionDate: string
 ) => {
-  const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const cur = escapeHtml(currency);
   const content = `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="display:inline-block;width:56px;height:56px;background:#fefce8;border-radius:50%;line-height:56px;">
-        <span style="font-size:24px;">⏳</span>
-      </div>
-    </div>
-    <h1 style="text-align:center;">Incoming Deposit</h1>
-    <p class="subtitle" style="text-align:center;">
-      Hi ${username}, you have a pending deposit being processed on your Vaultix account.
-    </p>
-
-    <div class="info-box" style="background:#fefce8;border:1px solid #fde68a;">
-      <p class="info-label" style="color:#92400e;">Pending Amount</p>
-      <p style="color:#d97706;font-size:28px;font-weight:700;margin:0;">+${currency} ${fmtAmt}</p>
-    </div>
-
-    <table class="detail-table">
-      <tr>
-        <td class="detail-label">Transaction ID</td>
-        <td class="detail-value mono" style="font-size:12px;">${transactionId}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Description</td>
-        <td class="detail-value">${description}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Date</td>
-        <td class="detail-value">${transactionDate}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Status</td>
-        <td class="detail-value" style="color:#d97706;">⏳ Pending Review</td>
-      </tr>
-    </table>
-
-    <div class="alert-box" style="background:#fefce8;border:1px solid #fde68a;">
-      <p style="color:#92400e;margin:0;">🔔 This deposit is being reviewed. Your balance will be updated once the deposit is confirmed.</p>
-    </div>
-
-    <div style="text-align:center;margin:24px 0;">
-      <a href="https://vaultixbank.org/login" class="btn btn-primary">View Account</a>
-    </div>
-
-    <hr class="divider" />
-    <p style="color:#94a3b8;font-size:12px;text-align:center;">
-      Questions? <a href="https://vaultixbank.org/support" style="color:#0f172a;font-weight:600;">Contact support</a>
-    </p>
+    ${heading('Incoming Deposit', `Hi ${escapeHtml(username)}, you have a pending deposit being processed on your Vaultix account.`)}
+    ${amountPanel('Pending Amount', `+${cur} ${formatMoney(amount)}`)}
+    ${progressSteps([['Received', true], ['Processing', true], ['Credited', false]])}
+    ${detailTable([
+      ['Transaction ID', escapeHtml(transactionId), { mono: true }],
+      ['Description', escapeHtml(description)],
+      ['Date', escapeHtml(transactionDate)],
+      ['Status', 'Processing'],
+    ])}
+    ${note('This deposit is being reviewed. Your balance will be updated once the deposit is confirmed.')}
+    ${button(`${SITE_URL}/login`, 'View Account')}
+    ${helpLine('Questions about this deposit?')}
   `;
-  return wrapEmail(content, `Pending deposit of ${currency} ${fmtAmt} on your Vaultix account`);
+  return wrapEmail(content, `Pending deposit of ${cur} ${formatMoney(amount)} on your Vaultix account`);
 };
 
 export const buildDepositSuccessEmail = (
@@ -722,57 +633,22 @@ export const buildDepositSuccessEmail = (
   transactionId: string,
   transactionDate: string
 ) => {
-  const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
-  const fmtBal = newBalance.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const cur = escapeHtml(currency);
   const content = `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="display:inline-block;width:56px;height:56px;background:#f0fdf4;border-radius:50%;line-height:56px;">
-        <span style="font-size:24px;">✅</span>
-      </div>
-    </div>
-    <h1 style="text-align:center;">Deposit Confirmed</h1>
-    <p class="subtitle" style="text-align:center;">
-      Hi ${username}, your pending deposit has been confirmed and credited to your account.
-    </p>
-
-    <div class="info-box" style="background:#f0fdf4;border:1px solid #bbf7d0;">
-      <p class="info-label" style="color:#166534;">Amount Credited</p>
-      <p class="amount-credit">+${currency} ${fmtAmt}</p>
-    </div>
-
-    <table class="detail-table">
-      <tr>
-        <td class="detail-label">Transaction ID</td>
-        <td class="detail-value mono" style="font-size:12px;">${transactionId}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Description</td>
-        <td class="detail-value">${description}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Date</td>
-        <td class="detail-value">${transactionDate}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">New Balance</td>
-        <td class="detail-value" style="color:#16a34a;">${currency} ${fmtBal}</td>
-      </tr>
-    </table>
-
-    <div class="alert-box" style="background:#f0fdf4;border:1px solid #bbf7d0;">
-      <p style="color:#166534;margin:0;">✅ This deposit is now available in your account.</p>
-    </div>
-
-    <div style="text-align:center;margin:24px 0;">
-      <a href="https://vaultixbank.org/login" class="btn btn-green">View Account</a>
-    </div>
-
-    <hr class="divider" />
-    <p style="color:#94a3b8;font-size:12px;text-align:center;">
-      Didn't expect this? <a href="https://vaultixbank.org/support" style="color:#0f172a;font-weight:600;">Contact support</a>
-    </p>
+    ${heading('Deposit Confirmed', `Hi ${escapeHtml(username)}, your pending deposit has been confirmed and credited to your account.`)}
+    ${amountPanel('Amount Credited', `+${cur} ${formatMoney(amount)}`)}
+    ${progressSteps([['Received', true], ['Processing', true], ['Credited', true]])}
+    ${detailTable([
+      ['Transaction ID', escapeHtml(transactionId), { mono: true }],
+      ['Description', escapeHtml(description)],
+      ['Date', escapeHtml(transactionDate)],
+      ['New Balance', `${cur} ${formatMoney(newBalance)}`, { accent: true }],
+    ])}
+    ${note('This deposit is now available in your account.')}
+    ${button(`${SITE_URL}/login`, 'View Account')}
+    ${helpLine('Didn’t expect this?')}
   `;
-  return wrapEmail(content, `Deposit of ${currency} ${fmtAmt} confirmed — your balance is updated`);
+  return wrapEmail(content, `Deposit of ${cur} ${formatMoney(amount)} confirmed. Your balance is updated.`);
 };
 
 export const buildDepositFailedEmail = (
@@ -783,56 +659,22 @@ export const buildDepositFailedEmail = (
   transactionId: string,
   transactionDate: string
 ) => {
-  const fmtAmt = amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const cur = escapeHtml(currency);
   const content = `
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="display:inline-block;width:56px;height:56px;background:#fef2f2;border-radius:50%;line-height:56px;">
-        <span style="font-size:24px;">❌</span>
-      </div>
-    </div>
-    <h1 style="text-align:center;">Deposit Failed</h1>
-    <p class="subtitle" style="text-align:center;">
-      Hi ${username}, unfortunately your pending deposit could not be processed.
-    </p>
-
-    <div class="info-box" style="background:#fef2f2;border:1px solid #fecaca;">
-      <p class="info-label" style="color:#991b1b;">Amount</p>
-      <p style="color:#dc2626;font-size:28px;font-weight:700;margin:0;">${currency} ${fmtAmt}</p>
-    </div>
-
-    <table class="detail-table">
-      <tr>
-        <td class="detail-label">Transaction ID</td>
-        <td class="detail-value mono" style="font-size:12px;">${transactionId}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Description</td>
-        <td class="detail-value">${description}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Date</td>
-        <td class="detail-value">${transactionDate}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Status</td>
-        <td class="detail-value" style="color:#dc2626;">❌ Failed</td>
-      </tr>
-    </table>
-
-    <div class="alert-box" style="background:#fef2f2;border:1px solid #fecaca;">
-      <p style="color:#991b1b;margin:0;">This deposit was not applied to your account. No funds have been deducted. If you believe this is an error, please contact our support team.</p>
-    </div>
-
-    <div style="text-align:center;margin:24px 0;">
-      <a href="https://vaultixbank.org/support" class="btn btn-red">Contact Support</a>
-    </div>
-
-    <hr class="divider" />
-    <p style="color:#94a3b8;font-size:12px;text-align:center;">
-      Need help? <a href="https://vaultixbank.org/support" style="color:#0f172a;font-weight:600;">Reach out to our team</a>
-    </p>
+    ${heading('Deposit Unsuccessful', `Hi ${escapeHtml(username)}, unfortunately your pending deposit could not be processed.`)}
+    ${amountPanel('Amount', `${cur} ${formatMoney(amount)}`)}
+    ${progressSteps([['Received', true], ['Processing', true], ['Not credited', false]])}
+    ${detailTable([
+      ['Transaction ID', escapeHtml(transactionId), { mono: true }],
+      ['Description', escapeHtml(description)],
+      ['Date', escapeHtml(transactionDate)],
+      ['Status', 'Not completed'],
+    ])}
+    ${note('This deposit was not applied to your account and no funds have been deducted. If you believe this is an error, please contact our support team.')}
+    ${button(`${SITE_URL}/support`, 'Contact Support')}
+    ${helpLine('Need help?', 'Reach out to our team')}
   `;
-  return wrapEmail(content, `Deposit of ${currency} ${fmtAmt} could not be processed`);
+  return wrapEmail(content, `Deposit of ${cur} ${formatMoney(amount)} could not be processed`);
 };
 
 // ─── Send Funding Status Emails ─────────────────────────────────────────────
@@ -950,30 +792,6 @@ export interface WireTransferNotice {
   newBalance?: number | null;
 }
 
-// Wire fields are typed in by an admin, so they must be escaped before going into HTML
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-
-const maskAccount = (accountNumber: string) =>
-  accountNumber.length > 4 ? `••••${accountNumber.slice(-4)}` : accountNumber;
-
-const formatMoney = (amount: number) =>
-  amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-// Product blue + white only, matching the website (primary-600 / primary-50)
-const WIRE_BLUE = {
-  primary: '#2563eb',
-  dark: '#1e40af',
-  tint: '#eff6ff',
-  border: '#bfdbfe',
-  muted: '#dbeafe',
-};
-
 const WIRE_STATUS_LABEL: Record<WireNoticeStatus, string> = {
   PENDING: 'Processing',
   SUCCESSFUL: 'Completed',
@@ -1034,32 +852,13 @@ const wirePartyRow = (role: string, name: string, bank?: string | null, account?
   return `
     <tr>
       <td style="width:56px;padding:14px 0 14px 16px;vertical-align:top;">
-        <span style="font-size:11px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:${WIRE_BLUE.primary};">${role}</span>
+        <span style="color:${COLOR.blue};font-family:${FONT};font-size:11px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;">${role}</span>
       </td>
       <td style="padding:12px 16px 12px 8px;vertical-align:top;">
-        <p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${escapeHtml(name)}</p>
-        ${meta ? `<p style="margin:2px 0 0;color:#64748b;font-size:13px;">${meta}</p>` : ''}
+        <p style="margin:0;color:${COLOR.ink};font-family:${FONT};font-size:15px;font-weight:600;">${escapeHtml(name)}</p>
+        ${meta ? `<p style="margin:2px 0 0;color:${COLOR.muted};font-family:${FONT};font-size:13px;">${meta}</p>` : ''}
       </td>
     </tr>`;
-};
-
-const wireProgress = (status: WireNoticeStatus) => {
-  const steps: [string, boolean][] = [
-    ['Initiated', true],
-    ['Processing', true],
-    [status === 'FAILED' ? 'Not completed' : 'Completed', status === 'SUCCESSFUL'],
-  ];
-
-  const cells = steps
-    .map(
-      ([label, reached]) => `
-      <td style="width:33%;padding:0 3px;vertical-align:top;">
-        <div style="height:4px;border-radius:2px;background:${reached ? WIRE_BLUE.primary : WIRE_BLUE.muted};"></div>
-        <p style="margin:6px 0 0;font-size:11px;font-weight:600;color:${reached ? WIRE_BLUE.primary : '#94a3b8'};text-align:center;">${label}</p>
-      </td>`
-    )
-    .join('');
-  return `<table style="width:100%;border-collapse:collapse;margin:24px 0 4px;"><tr>${cells}</tr></table>`;
 };
 
 export const buildWireTransferNoticeEmail = (n: WireTransferNotice) => {
@@ -1070,68 +869,35 @@ export const buildWireTransferNoticeEmail = (n: WireTransferNotice) => {
   const showBalance = n.audience === 'RECIPIENT' && n.isVaultixRecipient && n.status === 'SUCCESSFUL' && n.newBalance != null;
   const showDashboard = n.audience === 'RECIPIENT' && n.isVaultixRecipient;
 
-  const bankCodeRow = n.recipientSwiftCode
-    ? `<tr><td class="detail-label">SWIFT / BIC</td><td class="detail-value mono" style="font-size:13px;">${escapeHtml(n.recipientSwiftCode)}</td></tr>`
-    : n.recipientRoutingNumber
-      ? `<tr><td class="detail-label">Routing Number</td><td class="detail-value mono" style="font-size:13px;">${escapeHtml(n.recipientRoutingNumber)}</td></tr>`
-      : '';
+  const rows: DetailRow[] = [
+    ['Reference', escapeHtml(n.transactionId), { mono: true }],
+    ['Date &amp; Time', date],
+    ['Status', WIRE_STATUS_LABEL[n.status]],
+    ['Purpose', escapeHtml(n.reason)],
+  ];
+  if (n.recipientSwiftCode) rows.push(['SWIFT / BIC', escapeHtml(n.recipientSwiftCode), { mono: true, size: 13 }]);
+  else if (n.recipientRoutingNumber) rows.push(['Routing Number', escapeHtml(n.recipientRoutingNumber), { mono: true, size: 13 }]);
+  if (showBalance) rows.push(['New Balance', `${currency} ${formatMoney(n.newBalance as number)}`, { accent: true }]);
+
+  const finalStep = n.status === 'FAILED' ? 'Not completed' : 'Completed';
 
   const content = `
-    <h1 style="text-align:center;">${copy.title}</h1>
-    <p class="subtitle" style="text-align:center;">${copy.intro}</p>
-
-    <div class="info-box" style="background:${WIRE_BLUE.tint};border:1px solid ${WIRE_BLUE.border};">
-      <p class="info-label" style="color:${WIRE_BLUE.dark};">Transfer Amount</p>
-      <p style="color:${WIRE_BLUE.primary};font-size:28px;font-weight:700;margin:0;">${currency} ${fmtAmt}</p>
-    </div>
-
-    <table style="width:100%;border-collapse:separate;border-spacing:0;border:1px solid ${WIRE_BLUE.muted};border-radius:10px;background:#ffffff;">
+    ${heading(copy.title, copy.intro)}
+    ${amountPanel('Transfer Amount', `${currency} ${fmtAmt}`)}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;border:1px solid ${COLOR.soft};border-radius:10px;background:#ffffff;">
       ${wirePartyRow('From', n.senderName, n.senderBankName, n.senderAccountNumber)}
-      <tr><td colspan="2" style="padding:0 16px;"><div style="border-top:1px dashed ${WIRE_BLUE.border};"></div></td></tr>
+      <tr><td colspan="2" style="padding:0 16px;"><div style="border-top:1px dashed ${COLOR.border};font-size:0;line-height:0;">&nbsp;</div></td></tr>
       ${wirePartyRow('To', n.recipientName, n.recipientBankName, n.recipientAccountNumber)}
     </table>
-
-    ${wireProgress(n.status)}
-
-    <table class="detail-table">
-      <tr>
-        <td class="detail-label">Reference</td>
-        <td class="detail-value mono" style="font-size:12px;">${escapeHtml(n.transactionId)}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Date &amp; Time</td>
-        <td class="detail-value">${date}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Status</td>
-        <td class="detail-value">${WIRE_STATUS_LABEL[n.status]}</td>
-      </tr>
-      <tr>
-        <td class="detail-label">Purpose</td>
-        <td class="detail-value">${escapeHtml(n.reason)}</td>
-      </tr>
-      ${bankCodeRow}
-      ${showBalance ? `<tr><td class="detail-label">New Balance</td><td class="detail-value" style="color:${WIRE_BLUE.primary};">${currency} ${formatMoney(n.newBalance as number)}</td></tr>` : ''}
-    </table>
-
-    <div class="alert-box" style="background:${WIRE_BLUE.tint};border:1px solid ${WIRE_BLUE.border};">
-      <p style="color:${WIRE_BLUE.dark};margin:0;">${copy.note}</p>
-    </div>
-
-    ${
-      showDashboard
-        ? `<div style="text-align:center;margin:24px 0;"><a href="https://vaultixbank.org/login" class="btn" style="background:${WIRE_BLUE.primary};">View in Dashboard</a></div>`
-        : ''
-    }
-
-    <hr class="divider" />
-    <p style="color:#94a3b8;font-size:12px;text-align:center;">
-      Questions about this transfer? <a href="https://vaultixbank.org/support" style="color:${WIRE_BLUE.primary};font-weight:600;">Contact support</a>
-    </p>
+    ${progressSteps([['Initiated', true], ['Processing', true], [finalStep, n.status === 'SUCCESSFUL']])}
+    ${detailTable(rows)}
+    ${note(copy.note)}
+    ${showDashboard ? button(`${SITE_URL}/login`, 'View in Dashboard') : ''}
+    ${helpLine('Questions about this transfer?')}
   `;
 
   const previewStatus = { PENDING: 'is being processed', SUCCESSFUL: 'has been completed', FAILED: 'could not be completed' }[n.status];
-  return wrapEmail(content, `Wire transfer of ${currency} ${fmtAmt} ${previewStatus}`, WIRE_BLUE.primary);
+  return wrapEmail(content, `Wire transfer of ${currency} ${fmtAmt} ${previewStatus}`);
 };
 
 const WIRE_SUBJECTS: Record<WireNoticeAudience, Record<WireNoticeStatus, string>> = {
