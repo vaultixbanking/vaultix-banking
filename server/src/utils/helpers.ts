@@ -25,3 +25,9 @@ export const buildVerificationLink = (token: string): string => {
 export const generateTransactionId = (prefix: string = 'TXN'): string => {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 };
+
+/**
+ * Shows only the last 4 digits of an account number, e.g. ••••4521
+ */
+export const maskAccount = (accountNumber: string): string =>
+  accountNumber.length > 4 ? `••••${accountNumber.slice(-4)}` : accountNumber;

@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { maskAccount } from './helpers';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -43,9 +44,6 @@ const escapeHtml = (value: string) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-
-const maskAccount = (accountNumber: string) =>
-  accountNumber.length > 4 ? `••••${accountNumber.slice(-4)}` : accountNumber;
 
 const formatMoney = (amount: number) =>
   amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

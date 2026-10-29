@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
-import { generateTransactionId } from '../../utils/helpers';
+import { generateTransactionId, maskAccount } from '../../utils/helpers';
 import { sendDebitNotification } from '../../utils/email';
 import { WithdrawBody } from '../../types';
 
@@ -132,6 +132,7 @@ export const getWithdrawalHistoryService = async (userId: string) => {
       transferType: 'INCOMING_WIRE',
       sender: w.senderName,
       senderBank: w.senderBankName,
+      ...(w.senderAccountNumber ? { senderAccount: maskAccount(w.senderAccountNumber) } : {}),
       purpose: w.reason,
       currency: w.currency,
     },

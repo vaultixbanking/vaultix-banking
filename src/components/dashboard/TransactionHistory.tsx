@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   History, ArrowDownLeft, ArrowUpRight, Search,
   RefreshCw, Loader2, Calendar, Download,
-  ChevronDown, SlidersHorizontal, TrendingUp, TrendingDown, Activity
+  ChevronDown, SlidersHorizontal, TrendingUp, TrendingDown, Activity, Receipt
 } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, getUser } from '../../lib/api';
+import { maskAccount, type ReceiptData, type ReceiptParty, type ReceiptRow } from '../../lib/receipt';
+import ReceiptModal from '../ReceiptModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Transaction {
@@ -40,6 +42,107 @@ const txTitle = (tx: Transaction) =>
   : tx.withdrawalType === 'DEPOSIT' ? 'Account Credit'
   : tx.withdrawalType === 'CRYPTO' ? 'Crypto Withdrawal'
   : 'Bank Withdrawal';
+
+const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : '');
+
+const CRYPTO_NAMES: Record<string, string> = {
+  bitcoin: 'Bitcoin (BTC)',
+  ethereum: 'Ethereum (ETH)',
+  litecoin: 'Litecoin (LTC)',
+  usdt: 'Tether (USDT)',
+};
+
+// Copy matches the settlement notes shown on each transfer screen
+const BANK_TRANSFER_KINDS: Record<string, { title: string; type: string; note: string }> = {
+  WIRE: { title: 'Wire Transfer', type: 'International wire transfer', note: 'International wire transfers typically settle within 3–5 business days.' },
+  DOMESTIC: { title: 'Domestic Transfer', type: 'Domestic transfer', note: 'Domestic transfers typically settle within 1–2 business days.' },
+  BANK_WITHDRAWAL: { title: 'Bank Withdrawal', type: 'Bank withdrawal', note: 'Bank withdrawals typically process within 1–3 business days.' },
+};
+
+const buildReceipt = (tx: Transaction): ReceiptData => {
+  const d = tx.details ?? {};
+  const user = getUser() as { fullName?: string; accountNumber?: string; currencyType?: string } | null;
+  const currency = text(d.currency) || user?.currencyType || 'USD';
+  const you: ReceiptParty = {
+    role: 'From',
+    name: user?.fullName || 'Vaultix customer',
+    lines: ['Vaultix Bank', user?.accountNumber ? `Account ${maskAccount(user.accountNumber)}` : ''].filter(Boolean),
+  };
+  const row = (label: string, value: unknown, mono = false): ReceiptRow => ({ label, value: text(value), mono });
+  const account = (value: unknown) => (text(value) ? `Account ${maskAccount(text(value))}` : '');
+  const base = {
+    amount: tx.amount,
+    currency,
+    status: tx.status,
+    reference: tx.transactionId,
+    date: new Date(tx.createdAt),
+  };
+
+  if (d.transferType === 'INCOMING_WIRE') {
+    return {
+      ...base,
+      title: 'Wire Transfer',
+      amountLabel: 'Amount received',
+      parties: [
+        { role: 'From', name: text(d.sender) || 'Sender', lines: [text(d.senderBank), account(d.senderAccount)].filter(Boolean) },
+        { ...you, role: 'To' },
+      ],
+      rows: [row('Transaction type', 'Incoming wire transfer'), row('Purpose', d.purpose), row('Currency', currency)],
+      note: {
+        SUCCESSFUL: 'The funds have been credited to your Vaultix account.',
+        PENDING: 'This wire is being processed. Your balance updates once it completes.',
+        FAILED: 'This wire was not completed and your balance was not changed.',
+      }[tx.status],
+    };
+  }
+
+  if (tx.withdrawalType === 'DEPOSIT') {
+    return {
+      ...base,
+      title: 'Account Credit',
+      amountLabel: 'Amount credited',
+      parties: [{ ...you, role: 'Credited to' }],
+      rows: [row('Transaction type', 'Account credit'), row('Description', d.description), row('Currency', currency)],
+    };
+  }
+
+  if (tx.withdrawalType === 'CRYPTO') {
+    const asset = CRYPTO_NAMES[text(d.cryptoType)] || text(d.cryptoType);
+    return {
+      ...base,
+      title: 'Crypto Withdrawal',
+      amountLabel: 'Amount sent',
+      parties: [you, { role: 'To', name: asset ? `${asset} wallet` : 'Crypto wallet', lines: [text(d.network)].filter(Boolean) }],
+      rows: [
+        row('Transaction type', 'Crypto withdrawal'),
+        row('Asset', asset),
+        row('Network', d.network),
+        row('Wallet address', d.walletAddress, true),
+      ],
+    };
+  }
+
+  const kind = BANK_TRANSFER_KINDS[text(d.transferType)] ?? BANK_TRANSFER_KINDS.BANK_WITHDRAWAL;
+  const place = [text(d.beneficiaryAddress), text(d.beneficiaryCity), text(d.beneficiaryCountry)].filter(Boolean).join(', ');
+
+  return {
+    ...base,
+    title: kind.title,
+    amountLabel: 'Amount sent',
+    parties: [
+      you,
+      { role: 'To', name: text(d.beneficiaryName) || 'Beneficiary', lines: [text(d.bankName), account(d.accountNumber), place].filter(Boolean) },
+    ],
+    rows: [
+      row('Transaction type', kind.type),
+      row('SWIFT / BIC', d.swiftCode, true),
+      row('Routing number', d.routingNumber, true),
+      row('Narration', d.narration),
+      row('Currency', currency),
+    ],
+    note: tx.status === 'SUCCESSFUL' ? kind.note : undefined,
+  };
+};
 
 const getDateLabel = (dateStr: string): string => {
   const date = new Date(dateStr);
@@ -84,6 +187,8 @@ const TransactionHistory = () => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [showFilters, setShowFilters] = useState(false);
   const [expandedTx, setExpandedTx] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const closeReceipt = useCallback(() => setReceipt(null), []);
 
   const fetchTransactions = useCallback(async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
@@ -441,6 +546,16 @@ const TransactionHistory = () => {
                             <p className="text-xs text-secondary-400">No additional details available.</p>
                           )}
                         </div>
+                        <div className="mt-4 pt-4 border-t border-secondary-200/70 flex items-center justify-between gap-4">
+                          <p className="text-xs text-secondary-400">Download or share a receipt for this transaction.</p>
+                          <button
+                            onClick={() => setReceipt(buildReceipt(tx))}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 transition-colors shrink-0"
+                          >
+                            <Receipt className="w-4 h-4" />
+                            View Receipt
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -486,18 +601,27 @@ const TransactionHistory = () => {
                     </div>
 
                     {/* Mobile Expanded Details */}
-                    {expandedTx === tx.id && tx.details && (
+                    {expandedTx === tx.id && (
                       <div className="lg:hidden px-4 pb-4 pt-2 bg-secondary-50/60 border-b border-secondary-100">
-                        <div className="grid grid-cols-2 gap-2">
-                          {Object.entries(tx.details).map(([key, val]) =>
-                            val ? (
-                              <div key={key} className="bg-white rounded-lg p-2.5 border border-secondary-100">
-                                <p className="text-[10px] text-secondary-400 capitalize mb-0.5">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-                                <p className="text-xs font-medium text-secondary-700 break-all">{String(val)}</p>
-                              </div>
-                            ) : null
-                          )}
-                        </div>
+                        {tx.details && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(tx.details).map(([key, val]) =>
+                              val ? (
+                                <div key={key} className="bg-white rounded-lg p-2.5 border border-secondary-100">
+                                  <p className="text-[10px] text-secondary-400 capitalize mb-0.5">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                                  <p className="text-xs font-medium text-secondary-700 break-all">{String(val)}</p>
+                                </div>
+                              ) : null
+                            )}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => setReceipt(buildReceipt(tx))}
+                          className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors"
+                        >
+                          <Receipt className="w-4 h-4" />
+                          View Receipt
+                        </button>
                       </div>
                     )}
                   </div>
@@ -520,6 +644,8 @@ const TransactionHistory = () => {
           </div>
         )}
       </div>
+
+      {receipt && <ReceiptModal data={receipt} onClose={closeReceipt} />}
     </div>
   );
 };

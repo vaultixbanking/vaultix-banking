@@ -18,8 +18,11 @@ import {
   Mail,
   RefreshCw,
   FileText,
+  Receipt,
 } from 'lucide-react';
 import { adminApi } from '../../lib/adminApi';
+import { formatReceiptDate, type ReceiptData } from '../../lib/receipt';
+import ReceiptModal from '../ReceiptModal';
 
 type RecipientType = 'VAULTIX' | 'EXTERNAL';
 type Step = 'form' | 'review' | 'done';
@@ -61,6 +64,7 @@ interface WireRecord {
   notifyByEmail: boolean;
   adminNote: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface WireForm {
@@ -127,6 +131,56 @@ const fmt = (amount: number, currency: string) =>
 
 const mask = (account: string) => (account.length > 4 ? `••••${account.slice(-4)}` : account);
 
+const RECEIPT_NOTES: Record<string, (wire: WireRecord) => string> = {
+  SUCCESSFUL: wire => wire.recipientType === 'VAULTIX'
+    ? 'The funds have been credited to the recipient’s Vaultix account.'
+    : 'This wire transfer has been completed.',
+  PENDING: () => 'This wire transfer is being processed. A confirmation follows once it completes.',
+  FAILED: () => 'This wire transfer was not completed and no funds were moved.',
+};
+
+const wireReceipt = (wire: WireRecord): ReceiptData => ({
+  title: 'Wire Transfer',
+  amountLabel: 'Transfer amount',
+  amount: wire.amount,
+  currency: wire.currency,
+  status: wire.status as ReceiptData['status'],
+  reference: wire.transactionId,
+  date: new Date(wire.createdAt),
+  parties: [
+    {
+      role: 'From',
+      name: wire.senderName,
+      lines: [
+        wire.senderBankName ?? '',
+        wire.senderAccountNumber ? `Account ${mask(wire.senderAccountNumber)}` : '',
+        wire.senderAddress ?? '',
+      ].filter(Boolean),
+    },
+    {
+      role: 'To',
+      name: wire.recipientName,
+      lines: [
+        wire.recipientBankName,
+        `Account ${mask(wire.recipientAccountNumber)}`,
+        [wire.recipientAddress, wire.recipientCity, wire.recipientCountry].filter(Boolean).join(', '),
+      ].filter(Boolean),
+    },
+  ],
+  rows: [
+    { label: 'Transaction type', value: wire.recipientType === 'VAULTIX' ? 'Wire transfer to Vaultix account' : 'Wire transfer to external bank' },
+    { label: 'Purpose', value: wire.reason },
+    { label: 'SWIFT / BIC', value: wire.recipientSwiftCode ?? '', mono: true },
+    { label: 'Routing number', value: wire.recipientRoutingNumber ?? '', mono: true },
+    { label: 'Currency', value: wire.currency },
+    ...(wire.status === 'PENDING' ? [] : [{
+      label: wire.status === 'SUCCESSFUL' ? 'Completed' : 'Closed',
+      value: formatReceiptDate(new Date(wire.updatedAt)),
+    }]),
+  ],
+  note: RECEIPT_NOTES[wire.status]?.(wire),
+});
+
 const Field = ({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) => (
   <div>
     <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -172,6 +226,8 @@ const AdminWireTransfer = () => {
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const closeReceipt = useCallback(() => setReceipt(null), []);
 
   const update = <K extends keyof WireForm>(field: K, value: WireForm[K]) =>
     setForm(prev => ({ ...prev, [field]: value }));
@@ -706,13 +762,22 @@ const AdminWireTransfer = () => {
                 New balance for {result.recipientName}: <strong>{fmt(result.balanceAfter, result.currency)}</strong>
               </p>
             )}
-            <button
-              onClick={handleNewTransfer}
-              className="px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all inline-flex items-center gap-2"
-            >
-              <Send className="w-4 h-4" />
-              New Wire Transfer
-            </button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                onClick={() => setReceipt(wireReceipt(result))}
+                className="w-full sm:w-auto px-6 py-3 border border-primary-200 text-primary-700 bg-primary-50 rounded-xl font-semibold hover:bg-primary-100 transition-all inline-flex items-center justify-center gap-2"
+              >
+                <Receipt className="w-4 h-4" />
+                View Receipt
+              </button>
+              <button
+                onClick={handleNewTransfer}
+                className="w-full sm:w-auto px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all inline-flex items-center justify-center gap-2"
+              >
+                <Send className="w-4 h-4" />
+                New Wire Transfer
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -850,13 +915,24 @@ const AdminWireTransfer = () => {
                   </div>
 
                   {isExpanded && (
-                    <div className="px-6 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 bg-slate-50/60 pt-3 border-t border-slate-100">
-                      {details.filter(([, value]) => value).map(([label, value]) => (
-                        <div key={label} className="text-xs">
-                          <span className="text-slate-400">{label}: </span>
-                          <span className="text-slate-700 font-medium break-all">{value}</span>
-                        </div>
-                      ))}
+                    <div className="px-6 pb-4 bg-slate-50/60 pt-3 border-t border-slate-100">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                        {details.filter(([, value]) => value).map(([label, value]) => (
+                          <div key={label} className="text-xs">
+                            <span className="text-slate-400">{label}: </span>
+                            <span className="text-slate-700 font-medium break-all">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-slate-200/70 flex justify-end">
+                        <button
+                          onClick={() => setReceipt(wireReceipt(wire))}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 transition-colors w-full sm:w-auto justify-center"
+                        >
+                          <Receipt className="w-4 h-4" />
+                          View Receipt
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -865,6 +941,8 @@ const AdminWireTransfer = () => {
           </div>
         )}
       </div>
+
+      {receipt && <ReceiptModal data={receipt} onClose={closeReceipt} />}
     </div>
   );
 };
