@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
-  Check, Eye, EyeOff, 
+import {
+  Check, Eye, EyeOff,
   Upload, AlertCircle, ChevronLeft, ChevronRight,
   Lock, Mail, Phone, User, Calendar, MapPin, Globe,
   Briefcase, DollarSign, CreditCard, Shield
 } from 'lucide-react';
+import { API_URL, fetchWithTimeout, wakeServer } from '../lib/api';
+import { compressImage } from '../lib/image';
 
 interface FormData {
   // Step 1: Personal Information
@@ -87,11 +89,23 @@ const Signup: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [submitStatus, setSubmitStatus] = useState('');
+  const [emailTaken, setEmailTaken] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [createdAccount, setCreatedAccount] = useState<{ accountNumber: string; username: string; fullName: string } | null>(null);
+  const [createdAccount, setCreatedAccount] = useState<{
+    accountNumber: string;
+    username: string;
+    fullName: string;
+    verificationEmailSent?: boolean;
+  } | null>(null);
 
   const totalSteps = 4;
   const progress = (currentStep / totalSteps) * 100;
+
+  // Boot the API while the user fills in the form, so the final submit doesn't hit a sleeping server
+  useEffect(() => {
+    void wakeServer();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -102,16 +116,18 @@ const Signup: React.FC = () => {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setErrors(prev => ({ ...prev, photoID: 'File size must be less than 5MB' }));
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const original = e.target.files?.[0];
+    if (original) {
+      const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+      if (!allowedTypes.includes(original.type)) {
+        setErrors(prev => ({ ...prev, photoID: 'Please upload JPG, PNG, or PDF file' }));
         return;
       }
-      const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
-      if (!allowedTypes.includes(file.type)) {
-        setErrors(prev => ({ ...prev, photoID: 'Please upload JPG, PNG, or PDF file' }));
+      // Shrink phone photos first — full-size camera images are slow to upload and often over 5MB
+      const file = await compressImage(original);
+      if (file.size > 5 * 1024 * 1024) {
+        setErrors(prev => ({ ...prev, photoID: 'File size must be less than 5MB' }));
         return;
       }
       setFormData(prev => ({ ...prev, photoID: file }));
@@ -221,12 +237,13 @@ const Signup: React.FC = () => {
 
       setIsSubmitting(true);
       setSubmitError('');
+      setEmailTaken(false);
 
       try {
         const payload = new FormData();
         // Step 1 — Personal
         payload.append('fullName', formData.fullName);
-        payload.append('email', formData.email);
+        payload.append('email', formData.email.trim());
         if (formData.dateOfBirth) payload.append('dateOfBirth', formData.dateOfBirth);
         if (formData.gender) payload.append('gender', formData.gender);
         if (formData.nationality) payload.append('nationality', formData.nationality);
@@ -245,7 +262,7 @@ const Signup: React.FC = () => {
         if (formData.sourceOfFunds) payload.append('sourceOfFunds', formData.sourceOfFunds);
 
         // Step 3 — Security
-        payload.append('username', formData.username);
+        payload.append('username', formData.username.trim());
         payload.append('password', formData.password);
         payload.append('pin', formData.pin);
         if (formData.accountType) payload.append('accountType', formData.accountType);
@@ -259,15 +276,23 @@ const Signup: React.FC = () => {
           payload.append('photoID', formData.photoID);
         }
 
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${API_URL}/api/auth/signup`, {
+        // Uploading to a server that is still booting can hang for minutes, so wake it first
+        setSubmitStatus('Connecting to secure server...');
+        const awake = await wakeServer();
+        if (!awake) {
+          throw new Error("We couldn't reach our servers. Please check your internet connection and try again.");
+        }
+
+        setSubmitStatus('Creating your account...');
+        const response = await fetchWithTimeout(`${API_URL}/api/auth/signup`, {
           method: 'POST',
           body: payload, // FormData — browser sets multipart/form-data automatically
-        });
+        }, 120000);
 
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
+          if (response.status === 409 && data.message?.startsWith('Email')) setEmailTaken(true);
           throw new Error(data.message || 'Signup failed. Please try again.');
         }
 
@@ -276,13 +301,21 @@ const Signup: React.FC = () => {
 
         // Redirect to login after 5 seconds (user needs to verify email first)
         setTimeout(() => {
-          navigate('/login', { state: { signupSuccess: true, accountNumber: data.data.accountNumber, needsVerification: true } });
+          navigate('/login', {
+            state: {
+              signupSuccess: true,
+              accountNumber: data.data.accountNumber,
+              needsVerification: true,
+              verificationEmailSent: data.data.verificationEmailSent,
+            },
+          });
         }, 5000);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
         setSubmitError(message);
       } finally {
         setIsSubmitting(false);
+        setSubmitStatus('');
       }
     }
   };
@@ -571,6 +604,10 @@ const Signup: React.FC = () => {
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
+                      autoComplete="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all ${
                         errors.email ? 'border-red-500' : 'border-secondary-200'
                       }`}
@@ -750,6 +787,10 @@ const Signup: React.FC = () => {
                       name="username"
                       value={formData.username}
                       onChange={handleInputChange}
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all ${
                         errors.username ? 'border-red-500' : 'border-secondary-200'
                       }`}
@@ -1207,7 +1248,7 @@ const Signup: React.FC = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Creating Account...
+                    {submitStatus || 'Creating Account...'}
                   </>
                 ) : (
                   <>
@@ -1226,6 +1267,14 @@ const Signup: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-red-800">Signup failed</p>
                 <p className="text-sm text-red-600 mt-1">{submitError}</p>
+                {emailTaken && (
+                  <p className="text-sm text-red-600 mt-2">
+                    Already created your account?{' '}
+                    <Link to="/login" className="font-semibold text-primary-600 hover:text-primary-800 underline">Sign in</Link>
+                    {' '}or{' '}
+                    <Link to="/forgot-password" className="font-semibold text-primary-600 hover:text-primary-800 underline">reset your password</Link>.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -1257,15 +1306,27 @@ const Signup: React.FC = () => {
               <p className="text-sm text-secondary-500 mb-1">Your Account Number</p>
               <p className="text-xl font-bold text-primary-700 tracking-wider">{createdAccount.accountNumber}</p>
             </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <Mail className="w-5 h-5 text-blue-600" />
-                <p className="text-sm font-semibold text-blue-800">Check Your Email</p>
+            {createdAccount.verificationEmailSent === false ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <AlertCircle className="w-5 h-5 text-amber-600" />
+                  <p className="text-sm font-semibold text-amber-800">Verification Email Delayed</p>
+                </div>
+                <p className="text-sm text-amber-700">
+                  Your account is created, but we couldn&apos;t send your verification email just now. Don&apos;t sign up again — on the sign-in page, enter your email and tap &quot;Resend verification email&quot;.
+                </p>
               </div>
-              <p className="text-sm text-blue-700">
-                We've sent a verification link to your email address. Please verify your email to activate your account.
-              </p>
-            </div>
+            ) : (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Mail className="w-5 h-5 text-blue-600" />
+                  <p className="text-sm font-semibold text-blue-800">Check Your Email</p>
+                </div>
+                <p className="text-sm text-blue-700">
+                  We've sent a verification link to your email address. Please verify your email to activate your account.
+                </p>
+              </div>
+            )}
             <p className="text-sm text-secondary-500 mb-4">
               Please save your account number. You&apos;ll be redirected to login shortly.
             </p>

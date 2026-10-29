@@ -1,5 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
-import { signupService, loginService, verifyPinService, verifyEmailService, resendVerificationService } from './auth.service';
+import {
+  signupService,
+  loginService,
+  verifyPinService,
+  verifyEmailService,
+  resendVerificationService,
+  forgotPasswordService,
+  resetPasswordService,
+} from './auth.service';
 import { AuthRequest } from '../../types';
 
 export const signup = async (
@@ -63,6 +71,25 @@ export const verifyEmail = async (
   }
 };
 
+// Called by the website's /verify-email page (JSON). The GET redirect above stays for older links.
+export const confirmEmail = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { token } = req.body;
+    if (!token || typeof token !== 'string') {
+      res.status(400).json({ success: false, message: 'Invalid verification link.' });
+      return;
+    }
+    const result = await verifyEmailService(token);
+    res.status(200).json({ success: true, message: 'Email verified.', data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const resendVerification = async (
   req: Request,
   res: Response,
@@ -75,6 +102,45 @@ export const resendVerification = async (
       return;
     }
     const result = await resendVerificationService(email);
+    res.status(200).json({ success: true, message: result.message });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const forgotPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string') {
+      res.status(400).json({ success: false, message: 'Email is required.' });
+      return;
+    }
+    await forgotPasswordService(email);
+    res.status(200).json({
+      success: true,
+      message: 'If an account exists for that email, we have sent a password reset link. It expires in 1 hour.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const resetPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { token, password } = req.body;
+    if (!token || typeof token !== 'string' || !password || typeof password !== 'string') {
+      res.status(400).json({ success: false, message: 'Reset token and new password are required.' });
+      return;
+    }
+    const result = await resetPasswordService(token, password);
     res.status(200).json({ success: true, message: result.message });
   } catch (err) {
     next(err);

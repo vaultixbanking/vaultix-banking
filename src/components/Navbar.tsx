@@ -223,10 +223,14 @@ const Navbar = () => {
 
           {/* Sidebar Footer CTA */}
           <div className="p-5 border-t border-secondary-100">
-            <button className="btn-primary w-full flex items-center justify-center gap-2 text-sm">
+            <Link
+              to="/signup"
+              onClick={() => setIsOpen(false)}
+              className="btn-primary w-full flex items-center justify-center gap-2 text-sm"
+            >
               <Wallet className="w-5 h-5" />
               Open Account
-            </button>
+            </Link>
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Shield, User, Lock, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
+import { API_URL, fetchWithTimeout, wakeServer } from '../lib/api';
 
 const AdminLogin = () => {
   const navigate = useNavigate();
@@ -22,16 +22,18 @@ const AdminLogin = () => {
 
     setLoading(true);
     try {
-      const res = await api<{
-        success: boolean;
-        data: {
-          token: string;
-          admin: { id: string; username: string; email: string; role: string };
-        };
-      }>('/api/admin/login', {
+      // Not the api() helper: it treats any 401 as an expired customer session and
+      // redirects to /login, so a wrong admin password never showed an error.
+      await wakeServer();
+      const response = await fetchWithTimeout(`${API_URL}/api/admin/login`, {
         method: 'POST',
-        body: { username: username.trim(), password },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password }),
       });
+      const res = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(res.message || 'Login failed');
+      }
 
       localStorage.setItem('vaultix_admin_token', res.data.token);
       localStorage.setItem('vaultix_admin', JSON.stringify(res.data.admin));
@@ -80,6 +82,9 @@ const AdminLogin = () => {
                   onChange={e => setUsername(e.target.value)}
                   placeholder="admin"
                   autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                 />
               </div>

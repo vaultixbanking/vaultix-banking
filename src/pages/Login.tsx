@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
-import { 
-  Mail, Lock, Eye, EyeOff, LogIn, 
-  Shield, AlertCircle, Check, ArrowRight 
+import {
+  Mail, Lock, Eye, EyeOff, LogIn,
+  Shield, AlertCircle, Check, ArrowRight
 } from 'lucide-react';
+import { API_URL, fetchWithTimeout, wakeServer } from '../lib/api';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -12,6 +13,8 @@ const Login: React.FC = () => {
   const signupSuccess = (location.state as { signupSuccess?: boolean; accountNumber?: string })?.signupSuccess;
   const signupAccountNumber = (location.state as { accountNumber?: string })?.accountNumber;
   const needsVerification = (location.state as { needsVerification?: boolean })?.needsVerification;
+  const verificationEmailSent = (location.state as { verificationEmailSent?: boolean })?.verificationEmailSent;
+  const passwordReset = (location.state as { passwordReset?: boolean })?.passwordReset;
   const verifiedParam = searchParams.get('verified');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -24,16 +27,23 @@ const Login: React.FC = () => {
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
   const [loginMethod, setLoginMethod] = useState<'email' | 'username'>('email');
+  const [isSlow, setIsSlow] = useState(false);
+
+  // Boot the API while the user types, so sign-in doesn't wait on a sleeping server
+  useEffect(() => {
+    void wakeServer();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
+
     // Detect if input is email or username
     if (name === 'identifier') {
-      if (value.includes('@') && value.includes('.')) {
+      const trimmed = value.trim();
+      if (trimmed.includes('@') && trimmed.includes('.')) {
         setLoginMethod('email');
-      } else if (value.length > 0) {
+      } else if (trimmed.length > 0) {
         setLoginMethod('username');
       }
     }
@@ -46,12 +56,13 @@ const Login: React.FC = () => {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
-    if (!formData.identifier) {
+    const identifier = formData.identifier.trim();
+
+    if (!identifier) {
       newErrors.identifier = 'Please enter your username or email';
-    } else if (loginMethod === 'email' && !/\S+@\S+\.\S+/.test(formData.identifier)) {
+    } else if (loginMethod === 'email' && !/\S+@\S+\.\S+/.test(identifier)) {
       newErrors.identifier = 'Please enter a valid email address';
-    } else if (loginMethod === 'username' && formData.identifier.length < 3) {
+    } else if (loginMethod === 'username' && identifier.length < 3) {
       newErrors.identifier = 'Username must be at least 3 characters';
     }
     
@@ -74,19 +85,22 @@ const Login: React.FC = () => {
     
     setIsLoading(true);
     setLoginError('');
-    
+    // Tell the user what's happening instead of spinning silently while the server boots
+    const slowTimer = setTimeout(() => setIsSlow(true), 5000);
+    const identifier = formData.identifier.trim();
+
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${API_URL}/api/auth/login`, {
+      await wakeServer();
+      const response = await fetchWithTimeout(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          usernameOrEmail: formData.identifier,
+          usernameOrEmail: identifier,
           password: formData.password,
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(data.message || 'Invalid credentials. Please try again.');
@@ -97,7 +111,7 @@ const Login: React.FC = () => {
       localStorage.setItem('vaultix_user', JSON.stringify(data.data.user));
 
       if (rememberMe) {
-        localStorage.setItem('vaultix_remember', formData.identifier);
+        localStorage.setItem('vaultix_remember', identifier);
       } else {
         localStorage.removeItem('vaultix_remember');
       }
@@ -107,6 +121,8 @@ const Login: React.FC = () => {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
       setLoginError(message);
     } finally {
+      clearTimeout(slowTimer);
+      setIsSlow(false);
       setIsLoading(false);
     }
   };
@@ -117,20 +133,19 @@ const Login: React.FC = () => {
   };
 
   const handleResendVerification = async () => {
-    const email = formData.identifier;
+    const email = formData.identifier.trim();
     if (!email || !email.includes('@')) {
       setLoginError('Please enter your email address to resend the verification link.');
       return;
     }
     setIsResending(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${API_URL}/api/auth/resend-verification`, {
+      const response = await fetchWithTimeout(`${API_URL}/api/auth/resend-verification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message);
       setResendSuccess(true);
       setLoginError('');
@@ -231,11 +246,24 @@ const Login: React.FC = () => {
                       Account: <span className="font-semibold tracking-wide">{signupAccountNumber}</span>
                     </p>
                   )}
-                  {needsVerification ? (
+                  {needsVerification && verificationEmailSent === false ? (
+                    <p className="text-sm text-green-600 mt-0.5">We couldn't send your verification email yet. Enter your email and password below, tap Sign In, then tap &quot;Resend verification email&quot;.</p>
+                  ) : needsVerification ? (
                     <p className="text-sm text-green-600 mt-0.5">Please check your email and verify your account before signing in.</p>
                   ) : (
                     <p className="text-sm text-green-600 mt-0.5">Please sign in to continue.</p>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Password Reset Success */}
+            {passwordReset && (
+              <div className="mb-5 p-4 bg-green-50 border border-green-200 rounded-xl flex items-start gap-3">
+                <Check className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-green-800">Password updated</p>
+                  <p className="text-sm text-green-600 mt-0.5">Sign in with your new password.</p>
                 </div>
               </div>
             )}
@@ -285,6 +313,9 @@ const Login: React.FC = () => {
                   }`}
                   placeholder="Enter your username or email"
                   autoComplete="username email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                 />
                 {formData.identifier && !errors.identifier && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -380,6 +411,22 @@ const Login: React.FC = () => {
                       {isResending ? 'Sending...' : 'Resend verification email'}
                     </button>
                   )}
+                  {loginError.toLowerCase().includes('incorrect password') && (
+                    <Link
+                      to="/forgot-password"
+                      className="mt-2 inline-block text-sm font-semibold text-primary-600 hover:text-primary-800 underline"
+                    >
+                      Reset your password
+                    </Link>
+                  )}
+                  {loginError.toLowerCase().includes('no account found') && (
+                    <Link
+                      to="/signup"
+                      className="mt-2 inline-block text-sm font-semibold text-primary-600 hover:text-primary-800 underline"
+                    >
+                      Create an account
+                    </Link>
+                  )}
                 </div>
               </div>
             )}
@@ -406,6 +453,11 @@ const Login: React.FC = () => {
                 </div>
               )}
             </button>
+            {isSlow && (
+              <p className="mt-3 text-sm text-secondary-500 text-center">
+                Connecting to our secure server — this can take up to a minute the first time. Please don&apos;t close this page.
+              </p>
+            )}
 
             {/* Biometric Login Option */}
             <div className="mt-6">

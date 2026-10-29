@@ -10,6 +10,16 @@ export const generateAccountNumber = (): string => {
 };
 
 /**
+ * Email verification link. Points at the website (always up), not the API: the API host
+ * sleeps when idle, and opening it directly showed customers the host's "waking up" page.
+ * The website's /verify-email page wakes the API in the background and confirms the token.
+ */
+export const buildVerificationLink = (token: string): string => {
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  return `${clientUrl}/verify-email?token=${token}`;
+};
+
+/**
  * Generates a unique transaction ID with a prefix
  */
 export const generateTransactionId = (prefix: string = 'TXN'): string => {

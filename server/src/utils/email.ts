@@ -120,6 +120,83 @@ export const buildVerificationEmail = (username: string, verificationLink: strin
   return wrapEmail(content, 'Verify your Vaultix account email address');
 };
 
+/**
+ * Sent once to users whose verification email never arrived because of an email outage.
+ * Apologises, gives them a fresh verification link, and reminds them of their username.
+ */
+export const buildVerificationReminderEmail = (
+  fullName: string,
+  username: string,
+  verificationLink: string,
+  loginUrl: string
+) => {
+  // Fully inline-styled: some Gmail clients drop <style> blocks, so classes can't be relied on here
+  const text = 'color:#334155;font-size:15px;line-height:1.6;margin:0 0 16px;';
+  const small = 'color:#64748b;font-size:13px;line-height:1.6;margin:0 0 8px;';
+  const content = `
+    <p style="margin:0 0 20px;">
+      <span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #dbeafe;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;">Account activation</span>
+    </p>
+    <h1 style="color:#0f172a;font-size:24px;font-weight:700;line-height:1.3;margin:0 0 20px;">Activate your Vaultix account</h1>
+    <p style="${text}">Hi ${fullName},</p>
+    <p style="${text}margin-bottom:28px;">
+      We're sorry. A temporary problem with our email service meant your verification email never reached you, so you couldn't sign in. The problem is fixed, and your account and details are safe.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;">
+      <tr>
+        <td align="center">
+          <a href="${verificationLink}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;line-height:1;padding:16px 32px;border-radius:8px;">Verify Email &amp; Activate Account</a>
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin:0 0 24px;">
+      <tr>
+        <td style="padding:16px 20px;border-bottom:1px solid #e2e8f0;">
+          <p style="color:#64748b;font-size:12px;margin:0 0 4px;">Your username</p>
+          <p style="color:#0f172a;font-size:16px;font-weight:600;margin:0;">${username}</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:16px 20px;">
+          <p style="color:#64748b;font-size:12px;margin:0 0 4px;">After verifying, sign in at</p>
+          <p style="font-size:16px;font-weight:600;margin:0;"><a href="${loginUrl}" style="color:#2563eb;text-decoration:none;">${loginUrl.replace(/^https?:\/\//, '')}</a></p>
+        </td>
+      </tr>
+    </table>
+    <p style="${small}">You don't need to sign up again or reset your password. This link expires in 7 days. If you've already verified your email, you can ignore this message.</p>
+    <p style="${small}margin-bottom:24px;">Vaultix will never ask for your password or PIN by email.</p>
+    <hr style="border:none;border-top:1px solid #e2e8f0;margin:0 0 16px;" />
+    <p style="color:#64748b;font-size:12px;line-height:1.6;margin:0 0 4px;">Button not working? Copy this link into your browser:</p>
+    <p style="font-size:12px;line-height:1.5;margin:0;word-break:break-all;"><a href="${verificationLink}" style="color:#2563eb;">${verificationLink}</a></p>
+  `;
+  return wrapEmail(content, 'Sorry for the delay. Here is your link to activate your Vaultix account.');
+};
+
+export const buildPasswordResetEmail = (username: string, resetLink: string) => {
+  const content = `
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="display:inline-block;width:56px;height:56px;background:#eff6ff;border-radius:50%;line-height:56px;">
+        <span style="font-size:24px;">🔑</span>
+      </div>
+    </div>
+    <h1 style="text-align:center;">Reset Your Password</h1>
+    <p class="subtitle" style="text-align:center;">
+      Hi ${username}, we received a request to reset the password for your Vaultix account. Click the button below to choose a new one.
+    </p>
+    <div style="text-align:center;margin:28px 0;">
+      <a href="${resetLink}" class="btn btn-primary">Reset Password</a>
+    </div>
+    <hr class="divider" />
+    <p style="color:#94a3b8;font-size:12px;text-align:center;line-height:1.6;">
+      This link expires in 1 hour and can only be used once. If you didn't request a password reset, you can safely ignore this email — your password will not change.
+    </p>
+    <p style="color:#cbd5e1;font-size:11px;text-align:center;margin-top:12px;word-break:break-all;" class="mono">
+      ${resetLink}
+    </p>
+  `;
+  return wrapEmail(content, 'Reset your Vaultix account password');
+};
+
 export const buildWelcomeEmail = (username: string, accountNumber: string) => {
   const content = `
     <div style="text-align:center;margin-bottom:24px;">
@@ -407,6 +484,49 @@ export const sendVerificationEmail = async (to: string, username: string, verifi
     console.log(`[EMAIL] Verification email sent to ${to}`);
   } catch (err) {
     console.error('[EMAIL] Verification email error:', err);
+    throw err;
+  }
+};
+
+export const sendVerificationReminderEmail = async (
+  to: string,
+  fullName: string,
+  username: string,
+  verificationLink: string,
+  loginUrl: string
+) => {
+  const html = buildVerificationReminderEmail(fullName, username, verificationLink, loginUrl);
+  const { error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    replyTo: REPLY_TO,
+    to,
+    subject: 'Activate Your Vaultix Account — Sorry for the Delay',
+    html,
+    headers: emailHeaders,
+  });
+  if (error) {
+    throw new Error(`Failed to send verification reminder: ${JSON.stringify(error)}`);
+  }
+};
+
+export const sendPasswordResetEmail = async (to: string, username: string, resetLink: string) => {
+  try {
+    const html = buildPasswordResetEmail(username, resetLink);
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      replyTo: REPLY_TO,
+      to,
+      subject: 'Reset Your Vaultix Password',
+      html,
+      headers: emailHeaders,
+    });
+    if (error) {
+      console.error('[EMAIL] Password reset email failed:', JSON.stringify(error));
+      throw new Error('Failed to send password reset email.');
+    }
+    console.log(`[EMAIL] Password reset email sent to ${to}`);
+  } catch (err) {
+    console.error('[EMAIL] Password reset email error:', err);
     throw err;
   }
 };

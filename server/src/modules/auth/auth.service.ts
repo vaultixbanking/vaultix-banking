@@ -1,17 +1,23 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/database';
-import { generateToken } from '../../utils/jwt';
-import { generateAccountNumber } from '../../utils/helpers';
-import { sendVerificationEmail, sendWelcomeEmail } from '../../utils/email';
+import {
+  generateToken,
+  generatePasswordResetToken,
+  readPasswordResetUserId,
+  verifyPasswordResetToken,
+} from '../../utils/jwt';
+import { generateAccountNumber, buildVerificationLink } from '../../utils/helpers';
+import { sendVerificationEmail, sendWelcomeEmail, sendPasswordResetEmail } from '../../utils/email';
 import { SignupBody, LoginBody } from '../../types';
 
 export const signupService = async (
   body: SignupBody,
   photoIDPath: string | null
 ) => {
-  const emailAddress = body.email.toLowerCase();
-  const username = body.username.toLowerCase();
+  // Trim: mobile keyboards often append a trailing space, which made logins fail with "User not found"
+  const emailAddress = body.email.trim().toLowerCase();
+  const username = body.username.trim().toLowerCase();
 
   const existing = await prisma.user.findFirst({
     where: {
@@ -70,46 +76,63 @@ export const signupService = async (
     },
   });
 
-  // Send verification email (non-blocking — don't fail signup if email fails)
-  const apiUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
-  const verificationLink = `${apiUrl}/api/auth/verify-email/${verificationToken}`;
+  // Send verification email. A failed send must not fail signup (the account already
+  // exists), but the client needs to know so it doesn't promise an email that never arrives.
+  const verificationLink = buildVerificationLink(verificationToken);
 
-  sendVerificationEmail(emailAddress, user.fullName, verificationLink).catch((err) => {
+  let verificationEmailSent = true;
+  try {
+    await sendVerificationEmail(emailAddress, user.fullName, verificationLink);
+  } catch (err) {
+    verificationEmailSent = false;
     console.error('[SIGNUP] Failed to send verification email:', err);
-  });
+  }
 
   return {
     accountNumber: user.accountNumber,
     username: user.username,
     fullName: user.fullName,
-    message: 'Please check your email to verify your account.',
+    verificationEmailSent,
+    message: verificationEmailSent
+      ? 'Please check your email to verify your account.'
+      : 'We could not send your verification email right now. Please request a new one from the sign-in page.',
   };
 };
 
 export const loginService = async (body: LoginBody) => {
   const { usernameOrEmail, password } = body;
 
+  if (!usernameOrEmail || !password) {
+    throw Object.assign(new Error('Please enter your username or email and your password.'), { statusCode: 400 });
+  }
+
+  // Match the trimmed value, and also the raw value so accounts created before
+  // signup started trimming input can still sign in.
+  const raw = usernameOrEmail.toLowerCase();
+  const candidates = Array.from(new Set([raw.trim(), raw]));
+
   const user = await prisma.user.findFirst({
     where: {
       OR: [
-        { username: usernameOrEmail.toLowerCase() },
-        { emailAddress: usernameOrEmail.toLowerCase() },
+        { username: { in: candidates } },
+        { emailAddress: { in: candidates } },
       ],
     },
   });
 
   if (!user) {
-    throw Object.assign(new Error('Invalid credentials. User not found.'), { statusCode: 401 });
-  }
-
-  if (!user.emailVerified) {
-    throw Object.assign(new Error('Please verify your email address before logging in. Check your inbox for the verification link.'), { statusCode: 403 });
+    throw Object.assign(new Error('No account found with that username or email. Please check for typos or create an account.'), { statusCode: 401 });
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.password);
 
   if (!isPasswordValid) {
-    throw Object.assign(new Error('Invalid credentials. Incorrect password.'), { statusCode: 401 });
+    throw Object.assign(new Error('Incorrect password. Please try again or reset your password.'), { statusCode: 401 });
+  }
+
+  // Checked after the password so only the account owner learns the verification status
+  if (!user.emailVerified) {
+    throw Object.assign(new Error('Please verify your email address before logging in. Check your inbox for the verification link.'), { statusCode: 403 });
   }
 
   const token = generateToken({
@@ -149,13 +172,11 @@ export const verifyEmailService = async (token: string) => {
     throw Object.assign(new Error('Verification link has expired. Please request a new one.'), { statusCode: 400 });
   }
 
+  // The token is kept (it can only ever verify this address) so clicking the link
+  // a second time shows "already verified" instead of "invalid link"
   await prisma.user.update({
     where: { id: user.id },
-    data: {
-      emailVerified: true,
-      emailVerificationToken: null,
-      emailVerificationExpiry: null,
-    },
+    data: { emailVerified: true },
   });
 
   // Send welcome email (non-blocking)
@@ -169,7 +190,7 @@ export const verifyEmailService = async (token: string) => {
 
 export const resendVerificationService = async (email: string) => {
   const user = await prisma.user.findUnique({
-    where: { emailAddress: email.toLowerCase() },
+    where: { emailAddress: email.trim().toLowerCase() },
   });
 
   if (!user) {
@@ -191,11 +212,73 @@ export const resendVerificationService = async (email: string) => {
     },
   });
 
-  const apiUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
-  const verificationLink = `${apiUrl}/api/auth/verify-email/${verificationToken}`;
-  await sendVerificationEmail(user.emailAddress, user.fullName, verificationLink);
+  await sendVerificationEmail(user.emailAddress, user.fullName, buildVerificationLink(verificationToken));
 
   return { message: 'Verification email sent.' };
+};
+
+// ─── Password Reset ───────────────────────────────────────────────────────────
+
+// Per-user cooldown so the endpoint can't be used to flood someone's inbox
+const RESET_EMAIL_COOLDOWN_MS = 60 * 1000;
+const lastResetEmailAt = new Map<string, number>();
+
+export const forgotPasswordService = async (email: string) => {
+  const user = await prisma.user.findUnique({
+    where: { emailAddress: email.trim().toLowerCase() },
+  });
+
+  // Respond identically whether or not the account exists, so this can't be used to probe for emails
+  if (!user) return;
+
+  const now = Date.now();
+  const lastSent = lastResetEmailAt.get(user.id);
+  if (lastSent && now - lastSent < RESET_EMAIL_COOLDOWN_MS) return;
+  lastResetEmailAt.set(user.id, now);
+
+  const token = generatePasswordResetToken(user.id, user.password);
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const resetLink = `${clientUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+  // Not awaited, so response time doesn't reveal whether the account exists
+  sendPasswordResetEmail(user.emailAddress, user.fullName, resetLink).catch((err) => {
+    lastResetEmailAt.delete(user.id);
+    console.error('[FORGOT-PASSWORD] Failed to send reset email:', err);
+  });
+};
+
+export const resetPasswordService = async (token: string, password: string) => {
+  if (password.length < 8) {
+    throw Object.assign(new Error('Password must be at least 8 characters.'), { statusCode: 400 });
+  }
+
+  const invalidLink = () =>
+    Object.assign(new Error('This password reset link is invalid or has expired. Please request a new one.'), { statusCode: 400 });
+
+  const userId = readPasswordResetUserId(token);
+  if (!userId) throw invalidLink();
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !verifyPasswordResetToken(token, user.password)) throw invalidLink();
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  // Matching on the old hash makes the token single-use even if two requests race.
+  // Following the emailed link proves the user owns the address, so this also verifies the email.
+  const { count } = await prisma.user.updateMany({
+    where: { id: user.id, password: user.password },
+    data: {
+      password: hashedPassword,
+      emailVerified: true,
+      emailVerificationToken: null,
+      emailVerificationExpiry: null,
+    },
+  });
+  if (count === 0) throw invalidLink();
+
+  lastResetEmailAt.delete(user.id);
+
+  return { message: 'Your password has been reset. You can now sign in with your new password.' };
 };
 
 export const verifyPinService = async (userId: string, pin: string) => {

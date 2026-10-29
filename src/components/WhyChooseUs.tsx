@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Lock, Zap, Users, Globe, Headphones, BarChart3 } from 'lucide-react';
 
 const benefits = [
@@ -84,9 +85,12 @@ const WhyChooseUs = () => {
               <p className="text-lg font-bold">Ready to get started?</p>
               <p className="text-sm text-primary-200">Join 500,000+ customers banking smarter with Vaultix.</p>
             </div>
-            <button className="bg-white text-primary-700 px-6 py-3 rounded-lg font-semibold hover:bg-primary-50 transition-colors whitespace-nowrap">
+            <Link
+              to="/signup"
+              className="bg-white text-primary-700 px-6 py-3 rounded-lg font-semibold hover:bg-primary-50 transition-colors whitespace-nowrap"
+            >
               Open Account
-            </button>
+            </Link>
           </div>
         </div>
       </div>
