@@ -13,6 +13,7 @@ import {
   XCircle,
   CheckCircle2,
   ChevronDown,
+  Undo2,
 } from 'lucide-react';
 import { adminApi } from '../../lib/adminApi';
 
@@ -61,6 +62,7 @@ const statusConfig: Record<string, { bg: string; text: string; border: string; i
   SUCCESSFUL: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: CheckCircle2, label: 'Successful' },
   FAILED: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: XCircle, label: 'Failed' },
   COMPLETED: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: CheckCircle2, label: 'Completed' },
+  REVERSED: { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200', icon: Undo2, label: 'Reversed' },
 };
 
 const fmt = (amount: number, currency: string) =>
@@ -179,6 +181,7 @@ const AdminBLC = () => {
   const getTxIcon = (status: string) => {
     if (status === 'PENDING') return { bg: 'bg-amber-50', color: 'text-amber-600' };
     if (status === 'FAILED') return { bg: 'bg-red-50', color: 'text-red-600' };
+    if (status === 'REVERSED') return { bg: 'bg-slate-100', color: 'text-slate-500' };
     return { bg: 'bg-green-50', color: 'text-green-600' };
   };
 

@@ -9,6 +9,7 @@ import {
   sendDepositFailedEmail,
   sendWireTransferNotice,
   WireNoticeStatus,
+  WireTransferNotice,
 } from '../../utils/email';
 import { generateTransactionId } from '../../utils/helpers';
 import { DepositMethodResponse } from '../../types/deposit.types';
@@ -123,6 +124,7 @@ export const getAllUsersService = async () => {
       totalBalance: true,
       phone: true,
       country: true,
+      transferReviewRequired: true,
       createdAt: true,
     },
     orderBy: { createdAt: 'desc' },
@@ -155,6 +157,7 @@ export const getUserByAccountService = async (accountNumber: string) => {
       gender: true,
       dateOfBirth: true,
       occupation: true,
+      transferReviewRequired: true,
       createdAt: true,
     },
   });
@@ -385,6 +388,11 @@ export const getAdminStatsService = async () => {
     where: { status: 'PENDING' },
   });
 
+  // Customer transfers waiting to be completed or declined (sidebar badge)
+  const pendingTransfers = await prisma.withdrawal.count({
+    where: { status: 'PENDING' },
+  });
+
   return {
     totalUsers,
     totalWithdrawals,
@@ -392,19 +400,9 @@ export const getAdminStatsService = async () => {
     depositMethods,
     totalDepositRequests,
     pendingDeposits,
+    pendingTransfers,
     recentWithdrawals,
   };
-};
-
-// ─── Transaction History (all users) ────────────────────────────────────────
-
-export const getAllTransactionsService = async () => {
-  return prisma.withdrawal.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: {
-      user: { select: { fullName: true, accountNumber: true } },
-    },
-  });
 };
 
 // ─── Deposit Requests (admin view) ──────────────────────────────────────────
@@ -447,28 +445,28 @@ export const updateDepositRequestStatusService = async (
 // Vaultix acts as the money pool: the sender is never debited. When the recipient
 // is a Vaultix customer, their balance is credited once the wire is SUCCESSFUL.
 
-const notifyWireParties = (wire: WireTransfer, newBalance: number | null) => {
-  if (!wire.notifyByEmail) return;
+/** Email notice for a wire, shared by status updates here and reversals */
+export const buildWireNotice = (wire: WireTransfer, newBalance: number | null): Omit<WireTransferNotice, 'audience'> => ({
+  status: wire.status as WireNoticeStatus,
+  transactionId: wire.transactionId,
+  amount: wire.amount,
+  currency: wire.currency,
+  reason: wire.reason,
+  date: wire.updatedAt,
+  senderName: wire.senderName,
+  senderBankName: wire.senderBankName,
+  senderAccountNumber: wire.senderAccountNumber,
+  recipientName: wire.recipientName,
+  recipientBankName: wire.recipientBankName,
+  recipientAccountNumber: wire.recipientAccountNumber,
+  recipientSwiftCode: wire.recipientSwiftCode,
+  recipientRoutingNumber: wire.recipientRoutingNumber,
+  isVaultixRecipient: wire.recipientType === 'VAULTIX',
+  newBalance,
+});
 
-  const notice = {
-    status: wire.status as WireNoticeStatus,
-    transactionId: wire.transactionId,
-    amount: wire.amount,
-    currency: wire.currency,
-    reason: wire.reason,
-    date: wire.updatedAt,
-    senderName: wire.senderName,
-    senderBankName: wire.senderBankName,
-    senderAccountNumber: wire.senderAccountNumber,
-    recipientName: wire.recipientName,
-    recipientBankName: wire.recipientBankName,
-    recipientAccountNumber: wire.recipientAccountNumber,
-    recipientSwiftCode: wire.recipientSwiftCode,
-    recipientRoutingNumber: wire.recipientRoutingNumber,
-    isVaultixRecipient: wire.recipientType === 'VAULTIX',
-    newBalance,
-  };
-
+/** Send a wire notice to whichever of the sender and recipient have an email address */
+export const sendWireNoticeToParties = (wire: WireTransfer, notice: Omit<WireTransferNotice, 'audience'>) => {
   if (wire.senderEmail) {
     sendWireTransferNotice(wire.senderEmail, { ...notice, audience: 'SENDER' })
       .catch((err) => console.error('[ADMIN] Failed to send wire notice to sender:', err));
@@ -477,6 +475,11 @@ const notifyWireParties = (wire: WireTransfer, newBalance: number | null) => {
     sendWireTransferNotice(wire.recipientEmail, { ...notice, audience: 'RECIPIENT' })
       .catch((err) => console.error('[ADMIN] Failed to send wire notice to recipient:', err));
   }
+};
+
+const notifyWireParties = (wire: WireTransfer, newBalance: number | null) => {
+  if (!wire.notifyByEmail) return;
+  sendWireNoticeToParties(wire, buildWireNotice(wire, newBalance));
 };
 
 /**

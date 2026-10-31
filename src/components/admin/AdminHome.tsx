@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, ArrowRightLeft, DollarSign, Wallet, TrendingUp, Loader2 } from 'lucide-react';
+import { Users, ArrowRightLeft, DollarSign, Wallet, TrendingUp, Loader2, ShieldCheck, ChevronRight } from 'lucide-react';
 import { adminApi } from '../../lib/adminApi';
 
 interface Stats {
@@ -7,6 +7,7 @@ interface Stats {
   totalWithdrawals: number;
   totalBalance: number;
   depositMethods: number;
+  pendingTransfers?: number;
   recentWithdrawals: {
     id: string;
     transactionId: string;
@@ -51,8 +52,29 @@ const AdminHome = () => {
     { label: 'Deposit Methods', value: stats?.depositMethods ?? 0, icon: <Wallet className="w-5 h-5" />, color: 'bg-purple-50 text-purple-600', trend: '' },
   ];
 
+  const pending = stats?.pendingTransfers ?? 0;
+
   return (
     <div className="space-y-6">
+      {/* Pending review */}
+      <a
+        href="#transactions"
+        className={`flex items-center gap-4 rounded-2xl border p-5 transition-shadow hover:shadow-md ${pending > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
+      >
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pending > 0 ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+          <ShieldCheck className="w-5 h-5" />
+        </div>
+        <div className="flex-1">
+          <p className="text-2xl font-bold text-slate-900">{pending}</p>
+          <p className="text-sm text-slate-600">
+            {pending === 1 ? 'Transfer waiting for review' : 'Transfers waiting for review'}
+          </p>
+        </div>
+        <span className="flex items-center gap-1 text-sm font-medium text-primary-600">
+          Review <ChevronRight className="w-4 h-4" />
+        </span>
+      </a>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((card, i) => (
@@ -110,6 +132,7 @@ const AdminHome = () => {
                       <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
                         w.status === 'SUCCESSFUL' ? 'bg-green-100 text-green-700' :
                         w.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                        w.status === 'REVERSED' ? 'bg-slate-100 text-slate-700' :
                         'bg-red-100 text-red-700'
                       }`}>{w.status}</span>
                     </td>

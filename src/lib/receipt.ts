@@ -4,7 +4,7 @@
  * on iOS Safari). The PDF is a single page holding a high-resolution JPEG.
  */
 
-export type ReceiptStatus = 'PENDING' | 'SUCCESSFUL' | 'FAILED';
+export type ReceiptStatus = 'PENDING' | 'SUCCESSFUL' | 'FAILED' | 'DECLINED' | 'REVERSED';
 export type ReceiptFormat = 'pdf' | 'png' | 'jpg';
 
 export interface ReceiptParty {
@@ -65,6 +65,8 @@ const STATUS: Record<ReceiptStatus, { label: string; fg: string; bg: string }> =
   SUCCESSFUL: { label: 'Completed', fg: C.blue, bg: C.tint },
   PENDING: { label: 'Processing', fg: C.blueDark, bg: C.tint },
   FAILED: { label: 'Not completed', fg: '#475569', bg: C.hair },
+  DECLINED: { label: 'Declined', fg: '#475569', bg: C.hair },
+  REVERSED: { label: 'Reversed', fg: C.blueDark, bg: C.tint },
 };
 
 // ─── Formatting ──────────────────────────────────────────────────────────────
@@ -242,6 +244,23 @@ const drawStatusIcon = (ctx: Ctx, cx: number, cy: number, status: ReceiptStatus)
     ctx.moveTo(cx, cy - 6);
     ctx.lineTo(cx, cy);
     ctx.lineTo(cx + 4.5, cy + 3);
+    ctx.stroke();
+  } else if (status === 'REVERSED') {
+    // "Return" arrow: back along the top, around the right, and home along the bottom
+    circle(34, C.tint);
+    circle(25, C.soft);
+    ctx.strokeStyle = C.blueDark;
+    ctx.lineWidth = 2.8;
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, cy - 4);
+    ctx.lineTo(cx + 3, cy - 4);
+    ctx.arc(cx + 3, cy + 1.5, 5.5, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(cx - 3, cy + 7);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - 4, cy - 8);
+    ctx.lineTo(cx - 8, cy - 4);
+    ctx.lineTo(cx - 4, cy);
     ctx.stroke();
   } else {
     circle(34, C.hair);

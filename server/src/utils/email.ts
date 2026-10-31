@@ -313,98 +313,274 @@ export const buildCreditNotificationEmail = (
 };
 
 // ─── Withdrawal / Debit Email Templates ─────────────────────────────────────
+// Customer-facing wording rule: speak as "we" / Vaultix. Never mention staff, review,
+// approval or automation.
 
-const buildDebitContent = (
+type Details = Record<string, unknown> | undefined;
+
+const str = (value: unknown, fallback: string) =>
+  typeof value === 'string' && value.trim() ? value.trim() : fallback;
+
+interface DebitKind {
+  label: string;          // Title-case noun used in headings, e.g. "Wire Transfer"
+  kind: string;           // Lower-case noun used in sentences, e.g. "wire transfer"
+  completedTitle: string; // Heading of the completed confirmation
+  completedSubject: string;
+  processingSubject: string;
+  recipient?: string;     // Who the money went to, if known
+  rows: DetailRow[];
+  settlement: string;
+}
+
+/**
+ * One description per transfer type, shared by the completed, processing, declined
+ * and reversed emails so they always show the same details.
+ */
+const describeDebit = (transactionType: string, details: Details): DebitKind => {
+  const d = details ?? {};
+
+  if (transactionType === 'BANK' && d.transferType === 'WIRE') {
+    const recipient = str(d.beneficiaryName, 'N/A');
+    return {
+      label: 'Wire Transfer',
+      kind: 'wire transfer',
+      completedTitle: 'Wire Transfer Sent',
+      completedSubject: 'Vaultix — Wire Transfer Confirmation',
+      processingSubject: 'Vaultix — Transfer Received',
+      recipient,
+      rows: [
+        ['Beneficiary', escapeHtml(recipient)],
+        ['Bank', escapeHtml(str(d.bankName, 'N/A'))],
+        ['SWIFT / BIC', escapeHtml(str(d.swiftCode, 'N/A')), { mono: true }],
+      ],
+      settlement: 'International wire transfers typically settle within 3–5 business days.',
+    };
+  }
+
+  if (transactionType === 'BANK' && d.transferType === 'DOMESTIC') {
+    const recipient = str(d.recipientName, str(d.beneficiaryName, 'N/A'));
+    return {
+      label: 'Transfer',
+      kind: 'transfer',
+      completedTitle: 'Domestic Transfer Sent',
+      completedSubject: 'Vaultix — Transfer Confirmation',
+      processingSubject: 'Vaultix — Transfer Received',
+      recipient,
+      rows: [
+        ['Recipient', escapeHtml(recipient)],
+        ['Bank', escapeHtml(str(d.bankName, 'N/A'))],
+        ['Account', escapeHtml(maskAccount(str(d.accountNumber, 'N/A'))), { mono: true }],
+      ],
+      settlement: 'Domestic transfers typically settle within 1–2 business days.',
+    };
+  }
+
+  if (transactionType === 'BANK') {
+    return {
+      label: 'Withdrawal',
+      kind: 'withdrawal',
+      completedTitle: 'Bank Withdrawal',
+      completedSubject: 'Vaultix — Withdrawal Confirmation',
+      processingSubject: 'Vaultix — Withdrawal Received',
+      rows: [
+        ['Withdrawal To', escapeHtml(str(d.bankName, 'External Bank'))],
+        ['Account', escapeHtml(maskAccount(str(d.accountNumber, 'N/A'))), { mono: true }],
+      ],
+      settlement: 'Bank withdrawals typically process within 1–3 business days.',
+    };
+  }
+
+  if (transactionType === 'CRYPTO') {
+    const walletAddress = str(d.walletAddress, 'N/A');
+    const shortAddr = walletAddress.length > 12 ? `${walletAddress.slice(0, 6)}••••${walletAddress.slice(-6)}` : walletAddress;
+    const cryptoType = str(d.cryptoType, 'Crypto');
+    const network = str(d.network, '');
+    return {
+      label: 'Withdrawal',
+      kind: 'crypto withdrawal',
+      completedTitle: 'Crypto Withdrawal',
+      completedSubject: 'Vaultix — Withdrawal Confirmation',
+      processingSubject: 'Vaultix — Withdrawal Received',
+      rows: [
+        ['Crypto', escapeHtml(cryptoType.charAt(0).toUpperCase() + cryptoType.slice(1))],
+        ['Wallet', escapeHtml(shortAddr), { mono: true, size: 11 }],
+        ...(network ? [['Network', escapeHtml(network)] as DetailRow] : []),
+      ],
+      settlement: 'Crypto withdrawals are sent on-chain once processing is complete.',
+    };
+  }
+
+  return {
+    label: 'Transaction',
+    kind: 'transaction',
+    completedTitle: 'Money Sent',
+    completedSubject: 'Vaultix — Transaction Confirmation',
+    processingSubject: 'Vaultix — Transaction Received',
+    rows: [['Type', escapeHtml(transactionType)]],
+    settlement: 'Most transactions complete within 1–3 business days.',
+  };
+};
+
+// Optional customer-facing message typed by Vaultix staff (decline / reversal)
+const messagePanel = (message?: string | null) => {
+  const text = message?.trim();
+  if (!text) return '';
+  return `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;background:#ffffff;border:1px solid ${COLOR.border};border-radius:8px;border-collapse:separate;">
+    <tr>
+      <td style="padding:14px 18px;">
+        <p style="margin:0 0 6px;color:${COLOR.blueDark};font-family:${FONT};font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Message from Vaultix</p>
+        <p style="margin:0;color:${COLOR.ink};font-family:${FONT};font-size:14px;line-height:1.6;white-space:pre-line;">${escapeHtml(text)}</p>
+      </td>
+    </tr>
+  </table>`;
+};
+
+const toRecipient = (d: DebitKind) => (d.recipient && d.recipient !== 'N/A' ? ` to <strong>${escapeHtml(d.recipient)}</strong>` : '');
+
+const nowLabel = () => new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+
+export type DebitStage = 'COMPLETED' | 'PROCESSING';
+
+const buildDebitEmail = (
+  stage: DebitStage,
   username: string,
   amount: number,
   currency: string,
   newBalance: number,
   transactionId: string,
   transactionDate: string,
-  title: string,
-  detailRows: DetailRow[]
+  d: DebitKind
 ) => {
   const cur = escapeHtml(currency);
-  return `
-    ${heading(title, `Hi ${escapeHtml(username)}, a transaction has been processed on your account.`)}
+  const baseRows: DetailRow[] = [
+    ['Transaction ID', escapeHtml(transactionId), { mono: true }],
+    ['Date &amp; Time', escapeHtml(transactionDate)],
+    ...d.rows,
+  ];
+
+  if (stage === 'PROCESSING') {
+    const content = `
+    ${heading(`${d.label} Processing`, `Hi ${escapeHtml(username)}, we’ve received your ${d.kind}${toRecipient(d)} and it’s now being processed.`)}
+    ${amountPanel('Amount', `-${cur} ${formatMoney(amount)}`)}
+    ${progressSteps([['Submitted', true], ['Processing', true], ['Completed', false]])}
+    ${detailTable([...baseRows, ['Status', 'Processing'], ['Available Balance', `${cur} ${formatMoney(newBalance)}`]])}
+    ${note(`${d.settlement} We’ll email you again as soon as it’s completed.`)}
+    ${button(`${SITE_URL}/login`, 'View Transaction')}
+    ${helpLine('Didn’t make this transaction?')}
+  `;
+    return wrapEmail(content, `Your ${d.kind} of ${cur} ${formatMoney(amount)} is being processed`);
+  }
+
+  const content = `
+    ${heading(d.completedTitle, `Hi ${escapeHtml(username)}, a transaction has been processed on your account.`)}
     ${amountPanel('Amount Debited', `-${cur} ${formatMoney(amount)}`)}
-    ${detailTable([
-      ['Transaction ID', escapeHtml(transactionId), { mono: true }],
-      ['Date &amp; Time', escapeHtml(transactionDate)],
-      ...detailRows,
-      ['Remaining Balance', `${cur} ${formatMoney(newBalance)}`],
-    ])}
+    ${detailTable([...baseRows, ['Remaining Balance', `${cur} ${formatMoney(newBalance)}`]])}
     ${note('If you didn’t make this transaction, contact our support team immediately.')}
     ${button(`${SITE_URL}/login`, 'View Transaction')}
     ${helpLine('Questions about this transaction?')}
   `;
+  return wrapEmail(content, `${d.label} of ${cur} ${formatMoney(amount)} processed`);
 };
 
-const debitPreview = (kind: string, amount: number, currency: string) =>
-  `${kind} of ${escapeHtml(currency)} ${formatMoney(amount)} processed`;
+/** HTML of the debit email for a transfer, e.g. for previews */
+export const buildDebitNotificationHtml = (
+  stage: DebitStage,
+  username: string,
+  amount: number,
+  currency: string,
+  newBalance: number,
+  transactionType: string,
+  transactionId: string,
+  details?: Record<string, unknown>
+) => buildDebitEmail(stage, username, amount, currency, newBalance, transactionId, nowLabel(), describeDebit(transactionType, details));
 
-export const buildWireTransferEmail = (
-  username: string, amount: number, currency: string, newBalance: number,
-  transactionId: string, transactionDate: string,
-  beneficiaryName: string, bankName: string, swiftCode: string
-) => {
-  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Wire Transfer Sent', [
-    ['Beneficiary', escapeHtml(beneficiaryName)],
-    ['Bank', escapeHtml(bankName)],
-    ['SWIFT / BIC', escapeHtml(swiftCode), { mono: true }],
-  ]);
-  return wrapEmail(content, debitPreview('Wire transfer', amount, currency));
+// ─── Transfer Outcome Templates (declined / reversed) ───────────────────────
+
+export interface TransferOutcomeNotice {
+  username: string;
+  amount: number;
+  currency: string;
+  newBalance: number;
+  transactionId: string;        // the customer's original transfer
+  transactionType: string;      // BANK | CRYPTO
+  details?: Record<string, unknown>;
+  customerMessage?: string | null;
+  reversalId?: string;          // set for reversals
+}
+
+export const buildTransferDeclinedEmail = (n: TransferOutcomeNotice) => {
+  const d = describeDebit(n.transactionType, n.details);
+  const cur = escapeHtml(n.currency);
+  const content = `
+    ${heading(`${d.label} Declined`, `Hi ${escapeHtml(n.username)}, we couldn’t complete your ${d.kind}${toRecipient(d)}. The full amount has been returned to your Vaultix balance.`)}
+    ${amountPanel('Amount Returned', `+${cur} ${formatMoney(n.amount)}`)}
+    ${progressSteps([['Submitted', true], ['Processing', true], ['Declined', false]])}
+    ${detailTable([
+      ['Reference', escapeHtml(n.transactionId), { mono: true }],
+      ['Date &amp; Time', escapeHtml(nowLabel())],
+      ...d.rows,
+      ['Status', 'Declined'],
+      ['New Balance', `${cur} ${formatMoney(n.newBalance)}`, { accent: true }],
+    ])}
+    ${messagePanel(n.customerMessage)}
+    ${note('The returned funds are available in your account now.')}
+    ${button(`${SITE_URL}/login`, 'View Account')}
+    ${helpLine('Questions about this transaction?')}
+  `;
+  return wrapEmail(content, `Your ${d.kind} of ${cur} ${formatMoney(n.amount)} was declined and the funds were returned`);
 };
 
-export const buildDomesticTransferEmail = (
-  username: string, amount: number, currency: string, newBalance: number,
-  transactionId: string, transactionDate: string,
-  recipientName: string, bankName: string, accountNumber: string
-) => {
-  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Domestic Transfer Sent', [
-    ['Recipient', escapeHtml(recipientName)],
-    ['Bank', escapeHtml(bankName)],
-    ['Account', escapeHtml(maskAccount(accountNumber)), { mono: true }],
-  ]);
-  return wrapEmail(content, debitPreview('Domestic transfer', amount, currency));
+export const buildTransferReversedEmail = (n: TransferOutcomeNotice) => {
+  const d = describeDebit(n.transactionType, n.details);
+  const cur = escapeHtml(n.currency);
+  const content = `
+    ${heading(`${d.label} Reversed`, `Hi ${escapeHtml(n.username)}, your ${d.kind}${toRecipient(d)} has been reversed. The full amount has been returned to your Vaultix balance.`)}
+    ${amountPanel('Amount Returned', `+${cur} ${formatMoney(n.amount)}`)}
+    ${detailTable([
+      ...(n.reversalId ? [['Reversal Reference', escapeHtml(n.reversalId), { mono: true }] as DetailRow] : []),
+      ['Original Reference', escapeHtml(n.transactionId), { mono: true }],
+      ['Date &amp; Time', escapeHtml(nowLabel())],
+      ...d.rows,
+      ['New Balance', `${cur} ${formatMoney(n.newBalance)}`, { accent: true }],
+    ])}
+    ${messagePanel(n.customerMessage)}
+    ${note('The returned funds are available in your account now.')}
+    ${button(`${SITE_URL}/login`, 'View Account')}
+    ${helpLine('Questions about this reversal?')}
+  `;
+  return wrapEmail(content, `Your ${d.kind} of ${cur} ${formatMoney(n.amount)} was reversed and the funds were returned`);
 };
 
-export const buildBankWithdrawalEmail = (
-  username: string, amount: number, currency: string, newBalance: number,
-  transactionId: string, transactionDate: string,
-  bankName: string, accountNumber: string
-) => {
-  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Bank Withdrawal', [
-    ['Withdrawal To', escapeHtml(bankName)],
-    ['Account', escapeHtml(maskAccount(accountNumber)), { mono: true }],
-  ]);
-  return wrapEmail(content, debitPreview('Bank withdrawal', amount, currency));
-};
+export interface CreditReversalNotice {
+  username: string;
+  amount: number;
+  currency: string;
+  newBalance: number;
+  transactionId: string;   // the original credit
+  reversalId: string;
+  description: string;
+  customerMessage?: string | null;
+}
 
-export const buildCryptoWithdrawalEmail = (
-  username: string, amount: number, currency: string, newBalance: number,
-  transactionId: string, transactionDate: string,
-  cryptoType: string, walletAddress: string, network: string
-) => {
-  const shortAddr = walletAddress.length > 12 ? `${walletAddress.slice(0, 6)}••••${walletAddress.slice(-6)}` : walletAddress;
-  const crypto = cryptoType.charAt(0).toUpperCase() + cryptoType.slice(1);
-  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Crypto Withdrawal', [
-    ['Crypto', escapeHtml(crypto)],
-    ['Wallet', escapeHtml(shortAddr), { mono: true, size: 11 }],
-    ...(network ? [['Network', escapeHtml(network)] as DetailRow] : []),
-  ]);
-  return wrapEmail(content, debitPreview('Crypto withdrawal', amount, currency));
-};
-
-// Generic debit (fallback)
-export const buildDebitNotificationEmail = (
-  username: string, amount: number, currency: string, newBalance: number,
-  transactionType: string, transactionId: string, transactionDate: string
-) => {
-  const content = buildDebitContent(username, amount, currency, newBalance, transactionId, transactionDate, 'Money Sent', [
-    ['Type', escapeHtml(transactionType)],
-  ]);
-  return wrapEmail(content, `Debit of ${escapeHtml(currency)} ${formatMoney(amount)} from your Vaultix account`);
+export const buildCreditReversedEmail = (n: CreditReversalNotice) => {
+  const cur = escapeHtml(n.currency);
+  const content = `
+    ${heading('Credit Reversed', `Hi ${escapeHtml(n.username)}, a credit of ${cur} ${formatMoney(n.amount)} to your Vaultix account has been reversed, and the amount has been deducted from your balance.`)}
+    ${amountPanel('Amount Debited', `-${cur} ${formatMoney(n.amount)}`)}
+    ${detailTable([
+      ['Reversal Reference', escapeHtml(n.reversalId), { mono: true }],
+      ['Original Reference', escapeHtml(n.transactionId), { mono: true }],
+      ['Description', escapeHtml(n.description)],
+      ['Date &amp; Time', escapeHtml(nowLabel())],
+      ['Remaining Balance', `${cur} ${formatMoney(n.newBalance)}`],
+    ])}
+    ${messagePanel(n.customerMessage)}
+    ${note('If you have questions about this change, contact our support team and quote the reference above.')}
+    ${button(`${SITE_URL}/login`, 'View Account')}
+    ${helpLine('Questions about this reversal?')}
+  `;
+  return wrapEmail(content, `A credit of ${cur} ${formatMoney(n.amount)} on your Vaultix account was reversed`);
 };
 
 // ─── Send Functions ─────────────────────────────────────────────────────────
@@ -525,57 +701,8 @@ export const sendCreditNotification = async (
   }
 };
 
-export const sendDebitNotification = async (
-  to: string,
-  username: string,
-  amount: number,
-  currency: string,
-  newBalance: number,
-  transactionType: string,
-  transactionId: string,
-  details?: Record<string, unknown>
-) => {
+const sendEmail = async (to: string, subject: string, html: string, label: string) => {
   try {
-    const transactionDate = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-    let html: string;
-    let subject: string;
-
-    if (transactionType === 'BANK' && details?.transferType === 'WIRE') {
-      html = buildWireTransferEmail(
-        username, amount, currency, newBalance, transactionId, transactionDate,
-        (details.beneficiaryName as string) || 'N/A',
-        (details.bankName as string) || 'N/A',
-        (details.swiftCode as string) || 'N/A'
-      );
-      subject = 'Vaultix — Wire Transfer Confirmation';
-    } else if (transactionType === 'BANK' && details?.transferType === 'DOMESTIC') {
-      html = buildDomesticTransferEmail(
-        username, amount, currency, newBalance, transactionId, transactionDate,
-        (details.recipientName as string) || (details.beneficiaryName as string) || 'N/A',
-        (details.bankName as string) || 'N/A',
-        (details.accountNumber as string) || 'N/A'
-      );
-      subject = 'Vaultix — Transfer Confirmation';
-    } else if (transactionType === 'BANK') {
-      html = buildBankWithdrawalEmail(
-        username, amount, currency, newBalance, transactionId, transactionDate,
-        (details?.bankName as string) || 'External Bank',
-        (details?.accountNumber as string) || 'N/A'
-      );
-      subject = 'Vaultix — Withdrawal Confirmation';
-    } else if (transactionType === 'CRYPTO') {
-      html = buildCryptoWithdrawalEmail(
-        username, amount, currency, newBalance, transactionId, transactionDate,
-        (details?.cryptoType as string) || 'Crypto',
-        (details?.walletAddress as string) || 'N/A',
-        (details?.network as string) || ''
-      );
-      subject = 'Vaultix — Withdrawal Confirmation';
-    } else {
-      html = buildDebitNotificationEmail(username, amount, currency, newBalance, transactionType, transactionId, transactionDate);
-      subject = 'Vaultix — Transaction Confirmation';
-    }
-
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
       replyTo: REPLY_TO,
@@ -585,13 +712,48 @@ export const sendDebitNotification = async (
       headers: emailHeaders,
     });
     if (error) {
-      console.error('[EMAIL] Debit notification failed:', JSON.stringify(error));
+      console.error(`[EMAIL] ${label} failed:`, JSON.stringify(error));
     } else {
-      console.log(`[EMAIL] Debit notification (${transactionType}) sent to ${to}`);
+      console.log(`[EMAIL] ${label} sent to ${to}`);
     }
   } catch (err) {
-    console.error('[EMAIL] Debit notification error:', err);
+    console.error(`[EMAIL] ${label} error:`, err);
   }
+};
+
+/**
+ * Debit email for a customer transfer or withdrawal. COMPLETED is the confirmation;
+ * PROCESSING is sent when the transfer was accepted but has not completed yet.
+ */
+export const sendDebitNotification = async (
+  to: string,
+  username: string,
+  amount: number,
+  currency: string,
+  newBalance: number,
+  transactionType: string,
+  transactionId: string,
+  details?: Record<string, unknown>,
+  stage: DebitStage = 'COMPLETED'
+) => {
+  const d = describeDebit(transactionType, details);
+  const html = buildDebitNotificationHtml(stage, username, amount, currency, newBalance, transactionType, transactionId, details);
+  const subject = stage === 'PROCESSING' ? d.processingSubject : d.completedSubject;
+  await sendEmail(to, subject, html, `Debit notification (${transactionType}/${stage})`);
+};
+
+export const sendTransferDeclinedEmail = async (to: string, notice: TransferOutcomeNotice) => {
+  const d = describeDebit(notice.transactionType, notice.details);
+  await sendEmail(to, `Vaultix — ${d.label} Declined`, buildTransferDeclinedEmail(notice), 'Transfer declined email');
+};
+
+export const sendTransferReversedEmail = async (to: string, notice: TransferOutcomeNotice) => {
+  const d = describeDebit(notice.transactionType, notice.details);
+  await sendEmail(to, `Vaultix — ${d.label} Reversed`, buildTransferReversedEmail(notice), 'Transfer reversed email');
+};
+
+export const sendCreditReversedEmail = async (to: string, notice: CreditReversalNotice) => {
+  await sendEmail(to, 'Vaultix — Credit Reversed', buildCreditReversedEmail(notice), 'Credit reversed email');
 };
 
 // ─── Funding Status Email Templates ─────────────────────────────────────────
@@ -768,7 +930,7 @@ export const sendDepositFailedEmail = async (
 // ─── Wire Transfer Notice (admin-recorded wires) ────────────────────────────
 
 export type WireNoticeAudience = 'SENDER' | 'RECIPIENT';
-export type WireNoticeStatus = 'PENDING' | 'SUCCESSFUL' | 'FAILED';
+export type WireNoticeStatus = 'PENDING' | 'SUCCESSFUL' | 'FAILED' | 'REVERSED';
 
 export interface WireTransferNotice {
   audience: WireNoticeAudience;
@@ -788,12 +950,15 @@ export interface WireTransferNotice {
   recipientRoutingNumber?: string | null;
   isVaultixRecipient: boolean;
   newBalance?: number | null;
+  reversalId?: string | null;      // set when status is REVERSED
+  message?: string | null;         // optional customer-facing message
 }
 
 const WIRE_STATUS_LABEL: Record<WireNoticeStatus, string> = {
   PENDING: 'Processing',
   SUCCESSFUL: 'Completed',
   FAILED: 'Not completed',
+  REVERSED: 'Reversed',
 };
 
 const wireCopy = (n: WireTransferNotice) => {
@@ -815,6 +980,11 @@ const wireCopy = (n: WireTransferNotice) => {
       FAILED: {
         title: 'Wire Transfer Unsuccessful',
         intro: `Hi ${sender}, your wire transfer to <strong>${recipient}</strong> could not be completed.`,
+        note: 'If you have any questions, contact our support team and quote the reference number above.',
+      },
+      REVERSED: {
+        title: 'Wire Transfer Returned',
+        intro: `Hi ${sender}, your wire transfer to <strong>${recipient}</strong> has been reversed and returned.`,
         note: 'If you have any questions, contact our support team and quote the reference number above.',
       },
     }[n.status];
@@ -842,6 +1012,13 @@ const wireCopy = (n: WireTransferNotice) => {
       intro: `Hi ${recipient}, the wire transfer from <strong>${sender}</strong> to your account could not be completed.`,
       note: 'No funds were credited. If you have any questions, contact our support team and quote the reference number above.',
     },
+    REVERSED: {
+      title: 'Wire Transfer Reversed',
+      intro: n.isVaultixRecipient
+        ? `Hi ${recipient}, the wire transfer from <strong>${sender}</strong> that was credited to your Vaultix account has been reversed, and the amount has been deducted from your balance.`
+        : `Hi ${recipient}, the wire transfer from <strong>${sender}</strong> to your account has been reversed.`,
+      note: 'If you have any questions, contact our support team and quote the reference number above.',
+    },
   }[n.status];
 };
 
@@ -864,11 +1041,13 @@ export const buildWireTransferNoticeEmail = (n: WireTransferNotice) => {
   const fmtAmt = formatMoney(n.amount);
   const currency = escapeHtml(n.currency);
   const date = `${n.date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC`;
-  const showBalance = n.audience === 'RECIPIENT' && n.isVaultixRecipient && n.status === 'SUCCESSFUL' && n.newBalance != null;
+  const showBalance = n.audience === 'RECIPIENT' && n.isVaultixRecipient
+    && (n.status === 'SUCCESSFUL' || n.status === 'REVERSED') && n.newBalance != null;
   const showDashboard = n.audience === 'RECIPIENT' && n.isVaultixRecipient;
 
   const rows: DetailRow[] = [
-    ['Reference', escapeHtml(n.transactionId), { mono: true }],
+    ...(n.reversalId ? [['Reversal Reference', escapeHtml(n.reversalId), { mono: true }] as DetailRow] : []),
+    [n.reversalId ? 'Original Reference' : 'Reference', escapeHtml(n.transactionId), { mono: true }],
     ['Date &amp; Time', date],
     ['Status', WIRE_STATUS_LABEL[n.status]],
     ['Purpose', escapeHtml(n.reason)],
@@ -878,6 +1057,9 @@ export const buildWireTransferNoticeEmail = (n: WireTransferNotice) => {
   if (showBalance) rows.push(['New Balance', `${currency} ${formatMoney(n.newBalance as number)}`, { accent: true }]);
 
   const finalStep = n.status === 'FAILED' ? 'Not completed' : 'Completed';
+  const steps: [string, boolean][] = n.status === 'REVERSED'
+    ? [['Initiated', true], ['Completed', true], ['Reversed', true]]
+    : [['Initiated', true], ['Processing', true], [finalStep, n.status === 'SUCCESSFUL']];
 
   const content = `
     ${heading(copy.title, copy.intro)}
@@ -887,14 +1069,20 @@ export const buildWireTransferNoticeEmail = (n: WireTransferNotice) => {
       <tr><td colspan="2" style="padding:0 16px;"><div style="border-top:1px dashed ${COLOR.border};font-size:0;line-height:0;">&nbsp;</div></td></tr>
       ${wirePartyRow('To', n.recipientName, n.recipientBankName, n.recipientAccountNumber)}
     </table>
-    ${progressSteps([['Initiated', true], ['Processing', true], [finalStep, n.status === 'SUCCESSFUL']])}
+    ${progressSteps(steps)}
     ${detailTable(rows)}
+    ${messagePanel(n.message)}
     ${note(copy.note)}
     ${showDashboard ? button(`${SITE_URL}/login`, 'View in Dashboard') : ''}
     ${helpLine('Questions about this transfer?')}
   `;
 
-  const previewStatus = { PENDING: 'is being processed', SUCCESSFUL: 'has been completed', FAILED: 'could not be completed' }[n.status];
+  const previewStatus = {
+    PENDING: 'is being processed',
+    SUCCESSFUL: 'has been completed',
+    FAILED: 'could not be completed',
+    REVERSED: 'has been reversed',
+  }[n.status];
   return wrapEmail(content, `Wire transfer of ${currency} ${fmtAmt} ${previewStatus}`);
 };
 
@@ -903,11 +1091,13 @@ const WIRE_SUBJECTS: Record<WireNoticeAudience, Record<WireNoticeStatus, string>
     PENDING: 'Vaultix — Incoming Wire Transfer',
     SUCCESSFUL: 'Vaultix — Wire Transfer Received',
     FAILED: 'Vaultix — Wire Transfer Update',
+    REVERSED: 'Vaultix — Wire Transfer Reversed',
   },
   SENDER: {
     PENDING: 'Vaultix — Wire Transfer Initiated',
     SUCCESSFUL: 'Vaultix — Wire Transfer Completed',
     FAILED: 'Vaultix — Wire Transfer Update',
+    REVERSED: 'Vaultix — Wire Transfer Returned',
   },
 };
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Globe, AlertCircle, Check, ChevronRight, ChevronLeft, Building2, User, MapPin, Hash } from 'lucide-react';
+import { Globe, AlertCircle, Check, ChevronRight, ChevronLeft, Building2, User, MapPin, Hash, Clock } from 'lucide-react';
 import { api } from '../../lib/api';
 import TransactionPinModal from './TransactionPinModal';
 
@@ -22,6 +22,7 @@ interface TransactionResult {
   transactionId: string;
   newBalance: number;
   amount: number;
+  status: 'PENDING' | 'SUCCESSFUL';
 }
 
 const emptyForm: WireForm = {
@@ -119,17 +120,26 @@ const WireTransfer = () => {
           <div className="absolute -bottom-20 -left-20 w-52 h-52 rounded-full bg-primary-100/70 blur-2xl" />
 
           <div className="relative px-6 sm:px-8 py-8 sm:py-10 text-center">
-            <div className="w-20 h-20 bg-linear-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-green-500/30">
-              <Check className="w-10 h-10 text-white" />
-            </div>
+            {result?.status === 'PENDING' ? (
+              <div className="w-20 h-20 bg-linear-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-primary-500/30">
+                <Clock className="w-10 h-10 text-white" />
+              </div>
+            ) : (
+              <div className="w-20 h-20 bg-linear-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-green-500/30">
+                <Check className="w-10 h-10 text-white" />
+              </div>
+            )}
 
-            <h2 className="text-2xl sm:text-3xl font-bold text-secondary-900 mb-2">Transfer Submitted</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-secondary-900 mb-2">
+              {result?.status === 'PENDING' ? 'Transfer Submitted' : 'Transfer Sent'}
+            </h2>
             <p className="text-secondary-600 leading-relaxed">
               Your wire transfer of{' '}
               <span className="font-semibold text-secondary-900">
                 ${amt.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </span>{' '}
-              to <span className="font-semibold text-secondary-900">{form.beneficiaryName}</span> is now in processing.
+              to <span className="font-semibold text-secondary-900">{form.beneficiaryName}</span>{' '}
+              {result?.status === 'PENDING' ? 'is now processing.' : 'has been sent.'}
             </p>
             <p className="text-xs text-secondary-400 mt-2 mb-6">
               International wire transfers typically settle within 3-5 business days.

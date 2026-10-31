@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { adminApi } from '../lib/adminApi';
 import {
   LayoutDashboard,
   Users,
@@ -44,6 +45,24 @@ const AdminDashboard = () => {
   const location = useLocation();
   const [activeSection, setActiveSection] = useState<Section>('home');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingTransfers, setPendingTransfers] = useState(0);
+
+  // Pending-review count for the Transactions badge: on load, on navigation, every minute
+  const refreshPending = useCallback(async () => {
+    if (!localStorage.getItem('vaultix_admin_token')) return;
+    try {
+      const res = await adminApi<{ data: { pendingTransfers?: number } }>('/api/admin/stats');
+      setPendingTransfers(res.data.pendingTransfers ?? 0);
+    } catch {
+      // keep the last known count
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshPending();
+    const timer = setInterval(refreshPending, 60_000);
+    return () => clearInterval(timer);
+  }, [refreshPending, activeSection]);
 
   // Auth guard
   useEffect(() => {
@@ -84,7 +103,7 @@ const AdminDashboard = () => {
       case 'deposit-requests': return <AdminDepositRequests />;
       case 'blc': return <AdminBLC />;
       case 'wire-transfer': return <AdminWireTransfer />;
-      case 'transactions': return <AdminTransactions />;
+      case 'transactions': return <AdminTransactions onPendingChange={refreshPending} />;
       case 'settings': return <AdminSettings onLogout={handleLogout} />;
       default: return <AdminHome />;
     }
@@ -129,6 +148,14 @@ const AdminDashboard = () => {
             >
               {item.icon}
               <span className="flex-1 text-left">{item.label}</span>
+              {item.id === 'transactions' && pendingTransfers > 0 && (
+                <span
+                  className="min-w-5 h-5 px-1.5 rounded-full bg-amber-500 text-white text-[11px] font-bold flex items-center justify-center"
+                  aria-label={`${pendingTransfers} pending review`}
+                >
+                  {pendingTransfers > 99 ? '99+' : pendingTransfers}
+                </span>
+              )}
               {activeSection === item.id && <ChevronRight className="w-4 h-4 opacity-60" />}
             </button>
           ))}

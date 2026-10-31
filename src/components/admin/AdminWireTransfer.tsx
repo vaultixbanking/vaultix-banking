@@ -19,6 +19,7 @@ import {
   RefreshCw,
   FileText,
   Receipt,
+  Undo2,
 } from 'lucide-react';
 import { adminApi } from '../../lib/adminApi';
 import { formatReceiptDate, type ReceiptData } from '../../lib/receipt';
@@ -26,7 +27,7 @@ import ReceiptModal from '../ReceiptModal';
 
 type RecipientType = 'VAULTIX' | 'EXTERNAL';
 type Step = 'form' | 'review' | 'done';
-type StatusFilter = 'ALL' | 'PENDING' | 'SUCCESSFUL' | 'FAILED';
+type StatusFilter = 'ALL' | 'PENDING' | 'SUCCESSFUL' | 'FAILED' | 'REVERSED';
 
 interface VaultixUser {
   id: string;
@@ -121,6 +122,7 @@ const statusConfig: Record<string, { bg: string; text: string; border: string; i
   PENDING: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: Clock, label: 'Pending' },
   SUCCESSFUL: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: CheckCircle2, label: 'Successful' },
   FAILED: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: XCircle, label: 'Failed' },
+  REVERSED: { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200', icon: Undo2, label: 'Reversed' },
 };
 
 const inputClass =
@@ -137,6 +139,9 @@ const RECEIPT_NOTES: Record<string, (wire: WireRecord) => string> = {
     : 'This wire transfer has been completed.',
   PENDING: () => 'This wire transfer is being processed. A confirmation follows once it completes.',
   FAILED: () => 'This wire transfer was not completed and no funds were moved.',
+  REVERSED: wire => wire.recipientType === 'VAULTIX'
+    ? 'This wire transfer was reversed and the amount was taken back from the recipient’s Vaultix account.'
+    : 'This wire transfer was reversed.',
 };
 
 const wireReceipt = (wire: WireRecord): ReceiptData => ({
@@ -174,7 +179,7 @@ const wireReceipt = (wire: WireRecord): ReceiptData => ({
     { label: 'Routing number', value: wire.recipientRoutingNumber ?? '', mono: true },
     { label: 'Currency', value: wire.currency },
     ...(wire.status === 'PENDING' ? [] : [{
-      label: wire.status === 'SUCCESSFUL' ? 'Completed' : 'Closed',
+      label: wire.status === 'SUCCESSFUL' ? 'Completed' : wire.status === 'REVERSED' ? 'Reversed' : 'Closed',
       value: formatReceiptDate(new Date(wire.updatedAt)),
     }]),
   ],
@@ -808,7 +813,7 @@ const AdminWireTransfer = () => {
 
         <div className="px-6 py-3 border-b border-slate-100 flex flex-col sm:flex-row gap-3">
           <div className="flex gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto">
-            {(['ALL', 'PENDING', 'SUCCESSFUL', 'FAILED'] as const).map(s => (
+            {(['ALL', 'PENDING', 'SUCCESSFUL', 'FAILED', 'REVERSED'] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, Search, Loader2, RefreshCw, Eye, X } from 'lucide-react';
+import { Users, Search, Loader2, RefreshCw, Eye, X, ShieldCheck } from 'lucide-react';
 import { adminApi } from '../../lib/adminApi';
 
 interface UserItem {
@@ -12,6 +12,7 @@ interface UserItem {
   totalBalance: number;
   phone: string | null;
   country: string | null;
+  transferReviewRequired: boolean;
   createdAt: string;
 }
 
@@ -34,6 +35,8 @@ const AdminUsers = () => {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<UserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState('');
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -58,6 +61,26 @@ const AdminUsers = () => {
       // silently fail
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  // Transfers from customers under review wait in the Transactions hub
+  const toggleReview = async () => {
+    if (!selected) return;
+    const required = !selected.transferReviewRequired;
+    setReviewSaving(true);
+    setReviewError('');
+    try {
+      await adminApi(`/api/admin/users/${encodeURIComponent(selected.accountNumber)}/transfer-review`, {
+        method: 'PATCH',
+        body: { required },
+      });
+      setSelected({ ...selected, transferReviewRequired: required });
+      setUsers(prev => prev.map(u => (u.accountNumber === selected.accountNumber ? { ...u, transferReviewRequired: required } : u)));
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : 'Could not update transfer review');
+    } finally {
+      setReviewSaving(false);
     }
   };
 
@@ -118,7 +141,14 @@ const AdminUsers = () => {
                 {filtered.map(user => (
                   <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-3">
-                      <p className="font-medium text-slate-900">{user.fullName}</p>
+                      <p className="font-medium text-slate-900 flex items-center gap-1.5">
+                        {user.fullName}
+                        {user.transferReviewRequired && (
+                          <span title="Transfers wait for review" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                            <ShieldCheck className="w-3 h-3" /> Review
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-slate-400">{user.emailAddress}</p>
                     </td>
                     <td className="px-6 py-3 font-mono text-xs text-slate-500 hidden sm:table-cell">{user.accountNumber}</td>
@@ -165,6 +195,29 @@ const AdminUsers = () => {
                       <h4 className="font-bold text-slate-900">{selected.fullName}</h4>
                       <p className="text-sm text-slate-500">@{selected.username}</p>
                     </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Transfer review</p>
+                      <p className="text-xs text-slate-500">
+                        {selected.transferReviewRequired
+                          ? 'Transfers and withdrawals wait in Transactions → Pending review. The customer sees them as Processing.'
+                          : 'Transfers and withdrawals complete instantly.'}
+                      </p>
+                      {reviewError && <p className="text-xs text-red-600 mt-1">{reviewError}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={selected.transferReviewRequired}
+                      aria-label="Review this customer's transfers"
+                      disabled={reviewSaving}
+                      onClick={toggleReview}
+                      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${selected.transferReviewRequired ? 'bg-amber-500' : 'bg-slate-300'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${selected.transferReviewRequired ? 'translate-x-5' : ''}`} />
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">

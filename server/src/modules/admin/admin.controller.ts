@@ -9,7 +9,6 @@ import {
   creditUserAccountService,
   getUserFundingHistoryService,
   getAdminStatsService,
-  getAllTransactionsService,
   getAllDepositRequestsService,
   updateDepositRequestStatusService,
   updateFundingTransactionStatusService,
@@ -155,19 +154,6 @@ export const getAdminStats = async (
   try {
     const data = await getAdminStatsService();
     res.status(200).json({ success: true, message: 'Admin stats fetched.', data });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const getAllTransactions = async (
-  _req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const data = await getAllTransactionsService();
-    res.status(200).json({ success: true, message: 'Transactions fetched.', data });
   } catch (err) {
     next(err);
   }
@@ -375,7 +361,8 @@ export const getAllWireTransfers = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const status = typeof req.query.status === 'string' && isValidFundingStatus(req.query.status)
+    const status = typeof req.query.status === 'string'
+      && (isValidFundingStatus(req.query.status) || req.query.status === 'REVERSED')
       ? req.query.status
       : undefined;
     const search = typeof req.query.search === 'string' ? text(req.query.search) : undefined;

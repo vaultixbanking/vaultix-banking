@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowUpFromLine, AlertCircle, Check, ChevronRight,
-  ChevronLeft, Sparkles, Bitcoin, Banknote
+  ChevronLeft, Sparkles, Bitcoin, Banknote, Clock
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import TransactionPinModal from './TransactionPinModal';
@@ -14,6 +14,7 @@ interface SuccessData {
   transactionId: string;
   newBalance: number;
   amount: number;
+  status: 'PENDING' | 'SUCCESSFUL';
 }
 
 const cryptoOptions = [
@@ -151,6 +152,7 @@ const Withdrawal = () => {
   // ─── Success ───────────────────────────────────────────────────────────────────
   if (step === 'success' && success) {
     const isCrypto = tab === 'crypto';
+    const processing = success.status === 'PENDING';
     return (
       <div className="w-full">
         <div className="relative overflow-hidden bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 rounded-2xl shadow-xl shadow-primary-500/20 text-white">
@@ -166,16 +168,20 @@ const Withdrawal = () => {
             {/* Icon */}
             <div className="relative inline-flex items-center justify-center mb-5">
               <div className="w-20 h-20 bg-white/15 rounded-full flex items-center justify-center border border-white/30">
-                <Check className="w-10 h-10 text-white" strokeWidth={2.5} />
+                {processing
+                  ? <Clock className="w-10 h-10 text-white" strokeWidth={2.25} />
+                  : <Check className="w-10 h-10 text-white" strokeWidth={2.5} />}
               </div>
-              <div className="absolute -top-1 -right-1 w-7 h-7 bg-green-400 rounded-full flex items-center justify-center shadow-lg">
-                <Sparkles className="w-3.5 h-3.5 text-white" />
-              </div>
+              {!processing && (
+                <div className="absolute -top-1 -right-1 w-7 h-7 bg-green-400 rounded-full flex items-center justify-center shadow-lg">
+                  <Sparkles className="w-3.5 h-3.5 text-white" />
+                </div>
+              )}
             </div>
 
-            <h2 className="text-2xl font-bold mb-1">Withdrawal Successful!</h2>
+            <h2 className="text-2xl font-bold mb-1">{processing ? 'Withdrawal Submitted' : 'Withdrawal Successful!'}</h2>
             <p className="text-primary-200 text-sm mb-6">
-              Your {isCrypto ? 'crypto' : 'bank'} withdrawal has been processed
+              Your {isCrypto ? 'crypto' : 'bank'} withdrawal {processing ? 'is now processing' : 'has been processed'}
             </p>
 
             {/* Amount pill */}
@@ -235,6 +241,11 @@ const Withdrawal = () => {
               </div>
               <div className="h-px bg-white/10" />
               <div className="flex items-center justify-between">
+                <span className="text-primary-200 text-xs">Status</span>
+                <span className="text-white text-sm font-semibold">{processing ? 'Processing' : 'Completed'}</span>
+              </div>
+              <div className="h-px bg-white/10" />
+              <div className="flex items-center justify-between">
                 <span className="text-primary-200 text-xs">New Balance</span>
                 <span className="text-green-300 text-sm font-bold">
                   ${success.newBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
@@ -244,7 +255,9 @@ const Withdrawal = () => {
 
             <p className="text-xs text-primary-300 mb-6">
               {isCrypto
-                ? '⛓️ Crypto transactions are processed on-chain and may take a few minutes'
+                ? processing
+                  ? '⛓️ Crypto withdrawals are sent on-chain once processing is complete'
+                  : '⛓️ Crypto transactions are processed on-chain and may take a few minutes'
                 : '🕐 Bank withdrawals typically process within 1–3 business days'}
             </p>
 

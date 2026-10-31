@@ -9,7 +9,6 @@ import {
   creditUserAccount,
   getUserFundingHistory,
   getAdminStats,
-  getAllTransactions,
   getAllDepositRequests,
   updateDepositRequestStatus,
   updateFundingTransactionStatus,
@@ -17,6 +16,13 @@ import {
   getAllWireTransfers,
   updateWireTransferStatus,
 } from './admin.controller';
+import {
+  getAdminTransactions,
+  approveTransfer,
+  declineTransfer,
+  reverseTransaction,
+  setTransferReview,
+} from './adminTransactions.controller';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 
 const router = Router();
@@ -32,6 +38,7 @@ router.get('/users', authenticate, requireAdmin, getAllUsers);
 router.get('/users/:accountNumber', authenticate, requireAdmin, getUserByAccount);
 router.post('/users/:accountNumber/credit', authenticate, requireAdmin, creditUserAccount);
 router.get('/users/:accountNumber/funding-history', authenticate, requireAdmin, getUserFundingHistory);
+router.patch('/users/:accountNumber/transfer-review', authenticate, requireAdmin, setTransferReview);
 
 // ─── Deposit Methods (protected) ─────────────────────────────────────────────
 router.get('/deposit-methods', authenticate, requireAdmin, getDepositMethods);
@@ -52,7 +59,10 @@ router.get('/wire-transfers', authenticate, requireAdmin, getAllWireTransfers);
 router.post('/wire-transfers', authenticate, requireAdmin, createWireTransfer);
 router.patch('/wire-transfers/:transactionId/status', authenticate, requireAdmin, updateWireTransferStatus);
 
-// ─── Transactions (protected) ─────────────────────────────────────────────────
-router.get('/transactions', authenticate, requireAdmin, getAllTransactions);
+// ─── Transactions hub: review, approve, decline, reverse (protected) ─────────
+router.get('/transactions', authenticate, requireAdmin, getAdminTransactions);
+router.patch('/transactions/:transactionId/approve', authenticate, requireAdmin, approveTransfer);
+router.patch('/transactions/:transactionId/decline', authenticate, requireAdmin, declineTransfer);
+router.post('/transactions/:transactionId/reverse', authenticate, requireAdmin, reverseTransaction);
 
 export default router;

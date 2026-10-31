@@ -60,11 +60,17 @@ model User {
   newLoans       Float    @default(0)
   transactions   Float    @default(0)
 
+  // ─── Transfer review ───────────────────────────────────────────────────────
+  // When true, this customer's outgoing transfers wait as PENDING until an admin
+  // completes or declines them. Internal only: never select it for customer APIs.
+  transferReviewRequired Boolean @default(true)
+
   // ─── Relations ─────────────────────────────────────────────────────────────
   withdrawals         Withdrawal[]
   fundingTransactions FundingTransaction[]
   depositRequests     DepositRequest[]
   incomingWires       WireTransfer[]
+  reversals           TransactionReversal[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -80,13 +86,20 @@ model Withdrawal {
   amount         Float
   withdrawalType String
   details        Json?
-  status         String   @default("PENDING")
+  status         String   @default("PENDING") // PENDING | SUCCESSFUL | DECLINED | REVERSED
+
+  customerMessage    String?                  // shown to the customer on decline / reversal
+  adminNote          String?                  // internal only
+  processedAt        DateTime?
+  processedByAdminId String?
 
   userId         String
   user           User     @relation(fields: [userId], references: [id])
 
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
 
+  @@index([status])
   @@map("withdrawals")
 }
 
@@ -184,6 +197,36 @@ model WireTransfer {
   @@index([recipientUserId])
   @@index([status])
   @@map("wire_transfers")
+}
+
+// ─── Transaction Reversal (full-amount reversal of a completed transaction) ──
+// One row per reversed transaction. sourceTransactionId is unique, so the database
+// itself refuses a second reversal of the same transaction.
+
+model TransactionReversal {
+  id                  String   @id @default(cuid())
+  reversalId          String   @unique            // e.g. REV-1730212345678-4821
+  sourceType          String                       // WITHDRAWAL | FUNDING | WIRE
+  sourceTransactionId String   @unique            // transactionId of the reversed row
+
+  userId              String?                      // affected Vaultix customer (null: external wire)
+  user                User?    @relation(fields: [userId], references: [id])
+
+  direction           String                       // CREDIT (money back to customer) | DEBIT (taken back) | NONE
+  amount              Float
+  currency            String   @default("USD")
+  balanceBefore       Float?
+  balanceAfter        Float?
+
+  customerMessage     String?                      // included in the email and the history entry
+  adminNote           String?                      // internal only
+  notifyCustomer      Boolean  @default(true)
+  createdByAdminId    String?
+
+  createdAt           DateTime @default(now())
+
+  @@index([userId])
+  @@map("transaction_reversals")
 }
 
 // ─── Admin ──────────────────────────────────────────────────────────────────

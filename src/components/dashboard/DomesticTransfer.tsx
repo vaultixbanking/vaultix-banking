@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRightLeft, AlertCircle, Check, ChevronRight, ChevronLeft, Building2, User, Hash, Sparkles } from 'lucide-react';
+import { ArrowRightLeft, AlertCircle, Check, ChevronRight, ChevronLeft, Building2, User, Hash, Sparkles, Clock } from 'lucide-react';
 import { api } from '../../lib/api';
 import TransactionPinModal from './TransactionPinModal';
 
@@ -19,6 +19,7 @@ interface TransactionResult {
   transactionId: string;
   newBalance: number;
   amount: number;
+  status: 'PENDING' | 'SUCCESSFUL';
 }
 
 const emptyForm: DomesticForm = {
@@ -101,6 +102,7 @@ const DomesticTransfer = () => {
 
   // ─── Success ───────────────────────────────────────────────────────────────────
   if (step === 'success') {
+    const processing = result?.status === 'PENDING';
     return (
       <div className="w-full">
         <div className="relative overflow-hidden bg-linear-to-br from-primary-700 via-primary-600 to-primary-800 rounded-2xl shadow-xl shadow-primary-500/20 text-white">
@@ -117,17 +119,23 @@ const DomesticTransfer = () => {
             {/* Icon */}
             <div className="relative inline-flex items-center justify-center mb-5">
               <div className="w-20 h-20 bg-white/15 rounded-full flex items-center justify-center border border-white/30">
-                <Check className="w-10 h-10 text-white" strokeWidth={2.5} />
+                {processing
+                  ? <Clock className="w-10 h-10 text-white" strokeWidth={2.25} />
+                  : <Check className="w-10 h-10 text-white" strokeWidth={2.5} />}
               </div>
-              <div className="absolute -top-1 -right-1 w-7 h-7 bg-green-400 rounded-full flex items-center justify-center shadow-lg">
-                <Sparkles className="w-3.5 h-3.5 text-white" />
-              </div>
+              {!processing && (
+                <div className="absolute -top-1 -right-1 w-7 h-7 bg-green-400 rounded-full flex items-center justify-center shadow-lg">
+                  <Sparkles className="w-3.5 h-3.5 text-white" />
+                </div>
+              )}
             </div>
 
             {/* Message */}
-            <h2 className="text-2xl font-bold mb-1">Transfer Successful!</h2>
+            <h2 className="text-2xl font-bold mb-1">{processing ? 'Transfer Submitted' : 'Transfer Successful!'}</h2>
             <p className="text-primary-200 text-sm mb-6">
-              Your funds are on their way to {form.beneficiaryName}
+              {processing
+                ? `Your transfer to ${form.beneficiaryName} is now processing`
+                : `Your funds are on their way to ${form.beneficiaryName}`}
             </p>
 
             {/* Amount pill */}
@@ -160,6 +168,11 @@ const DomesticTransfer = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-primary-200 text-xs">Transaction ID</span>
                     <span className="text-white text-xs font-mono">{result.transactionId}</span>
+                  </div>
+                  <div className="h-px bg-white/10" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary-200 text-xs">Status</span>
+                    <span className="text-white text-sm font-semibold">{processing ? 'Processing' : 'Completed'}</span>
                   </div>
                   <div className="h-px bg-white/10" />
                   <div className="flex items-center justify-between">
